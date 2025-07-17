@@ -1,0 +1,22 @@
+﻿# Core Web Framework
+Flask
+Flask-Cors
+gunicorn
+uvicorn
+fastapi
+python-dotenv
+openai
+qwen-agent==0.0.27
+modelscope==1.27.0
+modelscope-agent==0.7.2
+uv==0.7.13
+asknews 
+python_a2a
+# Web3 & Blockchain
+web3==7.12.0
+eth-account==0.13.7
+eth-keys==0.7.0
+python_a2a
+websockets
+camel-ai
+

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>WebSocket 测试（简体中文）</title>
+</head>
+<body>
+<h2>WebSocket 测试（简体中文）</h2>
+<div id="log"></div>
+<script>
+const ws = new WebSocket("ws://localhost:6789");
+ws.onopen = () => {
+  document.getElementById('log').innerHTML += "<p>已连接 WebSocket 服务器</p>";
+};
+ws.onmessage = (event) => {
+  document.getElementById('log').innerHTML += "<p>收到消息: " + event.data + "</p>";
+};
+ws.onclose = () => {
+  document.getElementById('log').innerHTML += "<p>WebSocket 连接已关闭</p>";
+};
+</script>
+</body>
+</html>

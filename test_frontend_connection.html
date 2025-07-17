@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Agent连接测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .test-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .loading {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 User Agent连接测试</h1>
+        
+        <div class="test-section">
+            <h3>1. 后端健康检查</h3>
+            <button class="test-button" onclick="testBackendHealth()">测试后端API</button>
+            <div id="backend-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>2. 简单消息测试</h3>
+            <input type="text" id="simple-message" placeholder="输入测试消息" value="你好，这是一个测试消息">
+            <button class="test-button" onclick="testSimpleMessage()">发送测试消息</button>
+            <div id="simple-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>3. 购物请求测试</h3>
+            <input type="text" id="shopping-message" placeholder="输入购物请求" value="我想买一个iPhone 15 Pro">
+            <button class="test-button" onclick="testShoppingRequest()">发送购物请求</button>
+            <div id="shopping-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>4. 自定义测试</h3>
+            <textarea id="custom-message" placeholder="输入自定义消息...">确认购买iPhone 15 Pro，价格999美元</textarea>
+            <button class="test-button" onclick="testCustomMessage()">发送自定义消息</button>
+            <div id="custom-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>5. 批量测试</h3>
+            <button class="test-button" onclick="runAllTests()">运行所有测试</button>
+            <div id="batch-result"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000';
+        
+        function showResult(elementId, success, message, details = '') {
+            const element = document.getElementById(elementId);
+            const className = success ? 'success' : 'error';
+            const icon = success ? '✅' : '❌';
+            
+            element.innerHTML = `
+                <div class="result ${className}">
+                    ${icon} ${message}
+                    ${details ? `<br><small>${details}</small>` : ''}
+                </div>
+            `;
+        }
+        
+        function showLoading(elementId, message) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `
+                <div class="result loading">
+                    ⏳ ${message}
+                </div>
+            `;
+        }
+        
+        async function testBackendHealth() {
+            showLoading('backend-result', '检查后端健康状态...');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('backend-result', true, '后端API正常', 
+                              `状态: ${data.status}, 响应时间: ${Date.now() - startTime}ms`);
+                } else {
+                    showResult('backend-result', false, '后端API异常', 
+                              `HTTP ${response.status}: ${data.error || '未知错误'}`);
+                }
+            } catch (error) {
+                showResult('backend-result', false, '连接失败', error.message);
+            }
+        }
+        
+        async function testSimpleMessage() {
+            const message = document.getElementById('simple-message').value;
+            if (!message.trim()) {
+                showResult('simple-result', false, '请输入测试消息');
+                return;
+            }
+            
+            showLoading('simple-result', '发送测试消息...');
+            
+            try {
+                const startTime = Date.now();
+                const response = await fetch(`${API_BASE}/api/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        user_id: 'test_user'
+                    })
+                });
+                
+                const data = await response.json();
+                const responseTime = Date.now() - startTime;
+                
+                if (response.ok && data.success) {
+                    showResult('simple-result', true, '消息发送成功', 
+                              `响应时间: ${responseTime}ms<br>响应: ${data.response.substring(0, 200)}...`);
+                } else {
+                    showResult('simple-result', false, '消息发送失败', 
+                              data.error || '未知错误');
+                }
+            } catch (error) {
+                showResult('simple-result', false, '请求失败', error.message);
+            }
+        }
+        
+        async function testShoppingRequest() {
+            const message = document.getElementById('shopping-message').value;
+            if (!message.trim()) {
+                showResult('shopping-result', false, '请输入购物请求');
+                return;
+            }
+            
+            showLoading('shopping-result', '处理购物请求...');
+            
+            try {
+                const startTime = Date.now();
+                const response = await fetch(`${API_BASE}/api/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        user_id: 'test_user'
+                    })
+                });
+                
+                const data = await response.json();
+                const responseTime = Date.now() - startTime;
+                
+                if (response.ok && data.success) {
+                    const hasShoppingContent = data.response.toLowerCase().includes('商品') || 
+                                             data.response.toLowerCase().includes('价格') ||
+                                             data.response.toLowerCase().includes('iphone');
+                    
+                    showResult('shopping-result', hasShoppingContent, 
+                              hasShoppingContent ? '购物请求处理成功' : '响应不包含购物信息', 
+                              `响应时间: ${responseTime}ms<br>响应长度: ${data.response.length}字符`);
+                } else {
+                    showResult('shopping-result', false, '购物请求失败', 
+                              data.error || '未知错误');
+                }
+            } catch (error) {
+                showResult('shopping-result', false, '请求失败', error.message);
+            }
+        }
+        
+        async function testCustomMessage() {
+            const message = document.getElementById('custom-message').value;
+            if (!message.trim()) {
+                showResult('custom-result', false, '请输入自定义消息');
+                return;
+            }
+            
+            showLoading('custom-result', '发送自定义消息...');
+            
+            try {
+                const startTime = Date.now();
+                const response = await fetch(`${API_BASE}/api/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        user_id: 'test_user'
+                    })
+                });
+                
+                const data = await response.json();
+                const responseTime = Date.now() - startTime;
+                
+                if (response.ok && data.success) {
+                    showResult('custom-result', true, '自定义消息发送成功', 
+                              `响应时间: ${responseTime}ms<br>工作流状态: ${data.workflow_state || '未知'}<br>调用Agent: ${data.agent_called || '未知'}`);
+                } else {
+                    showResult('custom-result', false, '自定义消息失败', 
+                              data.error || '未知错误');
+                }
+            } catch (error) {
+                showResult('custom-result', false, '请求失败', error.message);
+            }
+        }
+        
+        async function runAllTests() {
+            showLoading('batch-result', '运行批量测试...');
+            
+            const tests = [
+                { name: '后端健康检查', func: testBackendHealth },
+                { name: '简单消息测试', func: testSimpleMessage },
+                { name: '购物请求测试', func: testShoppingRequest },
+                { name: '自定义消息测试', func: testCustomMessage }
+            ];
+            
+            let results = [];
+            
+            for (const test of tests) {
+                try {
+                    await test.func();
+                    results.push(`✅ ${test.name}: 通过`);
+                } catch (error) {
+                    results.push(`❌ ${test.name}: 失败 - ${error.message}`);
+                }
+                
+                // 等待1秒再执行下一个测试
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            
+            const successCount = results.filter(r => r.includes('✅')).length;
+            const totalCount = results.length;
+            
+            showResult('batch-result', successCount === totalCount, 
+                      `批量测试完成 (${successCount}/${totalCount})`, 
+                      results.join('<br>'));
+        }
+    </script>
+</body>
+</html>
