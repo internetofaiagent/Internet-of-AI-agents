@@ -1,0 +1,28 @@
+{
+  "conversation_history": [
+    {
+      "user_input": "你好",
+      "ai_response": "您好！我是您的Amazon购物助手，可以帮您快速完成商品购买。请问您需要购买什么商品？可以直接提供商品链接，或告诉我商品名称和需求，我会帮您找到合适的产品并完成购买。",
+      "timestamp": "2025-06-27T16:40:43.184030",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "qwen_agent_mcp"
+      ],
+      "thinking_content": ""
+    }
+  ],
+  "chat_history": [
+    {
+      "role": "user",
+      "content": "你好"
+    },
+    {
+      "role": "assistant",
+      "content": "您好！我是您的Amazon购物助手，可以帮您快速完成商品购买。请问您需要购买什么商品？可以直接提供商品链接，或告诉我商品名称和需求，我会帮您找到合适的产品并完成购买。"
+    }
+  ],
+  "session_id": "ab35eb97-f274-435b-ac96-b812fa904976",
+  "user_id": "default_user",
+  "current_state": "browsing",
+  "last_updated": "2025-06-27T16:40:43.184030"
+}

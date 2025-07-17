@@ -1,0 +1,64 @@
+{
+  "conversation_history": [
+    {
+      "user_input": "Hello, 这是一个A2A通信测试消息",
+      "ai_response": "Hello！收到您的A2A通信测试消息。我是专业的Amazon购物助手，专注于提供快速、简单的一键购买服务。我可以：\n\n1. 通过商品URL直接完成购买（推荐方式）\n2. 根据商品描述进行搜索后购买\n3. 处理支付流程和订单跟踪\n\n请问您需要测试哪个具体功能？如果需要模拟购买，可以提供：\n1. Amazon商品URL\n2. 收货地址信息\n3. 用户基本信息\n\n我会严格按照Amazon MCP和Fewsats MCP工具的工作流程进行响应。",
+      "timestamp": "2025-06-28T22:10:44.523782",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "qwen_agent_mcp"
+      ],
+      "thinking_content": ""
+    },
+    {
+      "user_input": "Hello, 这是一个A2A通信测试消息",
+      "ai_response": "Hello！再次收到您的A2A通信测试消息。目前没有检测到需要执行的购买请求或需要调用的工具。如果您需要进行实际购买或测试完整流程，请提供：\n\n1. Amazon商品URL\n2. 收货地址信息\n3. 用户基本信息（姓名/邮箱）\n\n我将严格按照一键购买SOP流程处理。当前状态：工具就绪，等待有效输入。",
+      "timestamp": "2025-06-28T22:10:54.466036",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "qwen_agent_mcp"
+      ],
+      "thinking_content": ""
+    },
+    {
+      "user_input": "搜索iPhone 15 Pro商品",
+      "ai_response": "抱歉，当前搜索功能遇到技术问题（错误：响应格式异常）。我仍然可以：\n1. 根据您提供的Amazon商品URL直接完成购买\n2. 如果您有具体商品ASIN，可提供B0...编号继续流程\n3. 或告知商品名称与价格范围，我将尝试其他检索方式\n\n是否需要切换其他操作方式？",
+      "timestamp": "2025-06-28T22:13:59.619461",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "qwen_agent_mcp"
+      ],
+      "thinking_content": ""
+    }
+  ],
+  "chat_history": [
+    {
+      "role": "user",
+      "content": "Hello, 这是一个A2A通信测试消息"
+    },
+    {
+      "role": "assistant",
+      "content": "Hello！收到您的A2A通信测试消息。我是专业的Amazon购物助手，专注于提供快速、简单的一键购买服务。我可以：\n\n1. 通过商品URL直接完成购买（推荐方式）\n2. 根据商品描述进行搜索后购买\n3. 处理支付流程和订单跟踪\n\n请问您需要测试哪个具体功能？如果需要模拟购买，可以提供：\n1. Amazon商品URL\n2. 收货地址信息\n3. 用户基本信息\n\n我会严格按照Amazon MCP和Fewsats MCP工具的工作流程进行响应。"
+    },
+    {
+      "role": "user",
+      "content": "Hello, 这是一个A2A通信测试消息"
+    },
+    {
+      "role": "assistant",
+      "content": "Hello！再次收到您的A2A通信测试消息。目前没有检测到需要执行的购买请求或需要调用的工具。如果您需要进行实际购买或测试完整流程，请提供：\n\n1. Amazon商品URL\n2. 收货地址信息\n3. 用户基本信息（姓名/邮箱）\n\n我将严格按照一键购买SOP流程处理。当前状态：工具就绪，等待有效输入。"
+    },
+    {
+      "role": "user",
+      "content": "搜索iPhone 15 Pro商品"
+    },
+    {
+      "role": "assistant",
+      "content": "抱歉，当前搜索功能遇到技术问题（错误：响应格式异常）。我仍然可以：\n1. 根据您提供的Amazon商品URL直接完成购买\n2. 如果您有具体商品ASIN，可提供B0...编号继续流程\n3. 或告知商品名称与价格范围，我将尝试其他检索方式\n\n是否需要切换其他操作方式？"
+    }
+  ],
+  "session_id": "f0b0ab35-e6f2-487e-9341-8183da3b1838",
+  "user_id": "default_user",
+  "current_state": "browsing",
+  "last_updated": "2025-06-28T22:13:59.620489"
+}

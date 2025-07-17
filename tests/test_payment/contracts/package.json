@@ -1,0 +1,44 @@
+{
+  "name": "polyagent-contracts",
+  "version": "1.0.0",
+  "description": "Smart contracts for PolyAgent Web3 AI Agent Protocol",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/deploy.js",
+    "deploy:testnet": "hardhat run scripts/deploy.js --network iotex_testnet",
+    "deploy:mainnet": "hardhat run scripts/deploy.js --network iotex_mainnet",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "console": "hardhat console",
+    "console:testnet": "hardhat console --network iotex_testnet",
+    "clean": "hardhat clean",
+    "node": "hardhat node",
+    "verify": "hardhat verify",
+    "balance": "hardhat balance --account",
+    "quick-deploy": "hardhat deploy-testnet"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.0",
+    "@openzeppelin/hardhat-upgrades": "^3.0.0",
+    "hardhat": "^2.19.0",
+    "dotenv": "^16.3.1",
+    "chai": "^4.3.10",
+    "ethers": "^6.8.0"
+  },
+  "keywords": [
+    "blockchain",
+    "ethereum",
+    "smart-contracts",
+    "erc20",
+    "defi",
+    "hardhat",
+    "openzeppelin"
+  ],
+  "author": "PolyAgent Team",
+  "license": "MIT"
+}

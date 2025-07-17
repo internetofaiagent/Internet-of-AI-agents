@@ -1,0 +1,64 @@
+{
+  "conversation_history": [
+    {
+      "user_input": "你好",
+      "ai_response": "\n抱歉，当前无法连接到Amazon购物服务。\n\n🔧 **技术状态**：\n- MCP工具暂时不可用\n- 无法执行商品购买操作\n\n🌟 **建议**：\n1. 请稍后重试\n2. 检查网络连接\n3. 确保提供了有效的Amazon商品URL\n\n如需帮助，请联系技术支持。\n",
+      "timestamp": "2025-06-27T16:15:37.149170",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "error_fallback"
+      ],
+      "thinking_content": ""
+    },
+    {
+      "user_input": "我想买一个iPhone 15 Pro",
+      "ai_response": "\n抱歉，当前无法连接到Amazon购物服务。\n\n🔧 **技术状态**：\n- MCP工具暂时不可用\n- 无法执行商品购买操作\n\n🌟 **建议**：\n1. 请稍后重试\n2. 检查网络连接\n3. 确保提供了有效的Amazon商品URL\n\n如需帮助，请联系技术支持。\n",
+      "timestamp": "2025-06-27T16:18:40.456630",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "error_fallback"
+      ],
+      "thinking_content": ""
+    },
+    {
+      "user_input": "帮我搜索苹果手机",
+      "ai_response": "\n抱歉，当前无法连接到Amazon购物服务。\n\n🔧 **技术状态**：\n- MCP工具暂时不可用\n- 无法执行商品购买操作\n\n🌟 **建议**：\n1. 请稍后重试\n2. 检查网络连接\n3. 确保提供了有效的Amazon商品URL\n\n如需帮助，请联系技术支持。\n",
+      "timestamp": "2025-06-27T16:21:43.875495",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "error_fallback"
+      ],
+      "thinking_content": ""
+    }
+  ],
+  "chat_history": [
+    {
+      "role": "user",
+      "content": "你好"
+    },
+    {
+      "role": "assistant",
+      "content": "\n抱歉，当前无法连接到Amazon购物服务。\n\n🔧 **技术状态**：\n- MCP工具暂时不可用\n- 无法执行商品购买操作\n\n🌟 **建议**：\n1. 请稍后重试\n2. 检查网络连接\n3. 确保提供了有效的Amazon商品URL\n\n如需帮助，请联系技术支持。\n"
+    },
+    {
+      "role": "user",
+      "content": "我想买一个iPhone 15 Pro"
+    },
+    {
+      "role": "assistant",
+      "content": "\n抱歉，当前无法连接到Amazon购物服务。\n\n🔧 **技术状态**：\n- MCP工具暂时不可用\n- 无法执行商品购买操作\n\n🌟 **建议**：\n1. 请稍后重试\n2. 检查网络连接\n3. 确保提供了有效的Amazon商品URL\n\n如需帮助，请联系技术支持。\n"
+    },
+    {
+      "role": "user",
+      "content": "帮我搜索苹果手机"
+    },
+    {
+      "role": "assistant",
+      "content": "\n抱歉，当前无法连接到Amazon购物服务。\n\n🔧 **技术状态**：\n- MCP工具暂时不可用\n- 无法执行商品购买操作\n\n🌟 **建议**：\n1. 请稍后重试\n2. 检查网络连接\n3. 确保提供了有效的Amazon商品URL\n\n如需帮助，请联系技术支持。\n"
+    }
+  ],
+  "session_id": "ba5fd1c1-97ff-4f27-9315-34e3ea711cc2",
+  "user_id": "default_user",
+  "current_state": "browsing",
+  "last_updated": "2025-06-27T16:21:43.875495"
+}

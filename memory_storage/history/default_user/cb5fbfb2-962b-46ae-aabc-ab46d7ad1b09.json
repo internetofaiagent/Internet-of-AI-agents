@@ -1,0 +1,46 @@
+{
+  "conversation_history": [
+    {
+      "user_input": "Hello, 这是一个A2A通信测试消息",
+      "ai_response": "通信测试成功！请提供Amazon商品URL和收货地址，我将为您完成一键购买。",
+      "timestamp": "2025-06-28T22:00:26.435855",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "qwen_agent_mcp"
+      ],
+      "thinking_content": ""
+    },
+    {
+      "user_input": "Hello, 这是一个A2A通信测试消息",
+      "ai_response": "通信测试成功！请提供Amazon商品URL和收货地址，我将为您完成一键购买。",
+      "timestamp": "2025-06-28T22:00:35.420361",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "qwen_agent_mcp"
+      ],
+      "thinking_content": ""
+    }
+  ],
+  "chat_history": [
+    {
+      "role": "user",
+      "content": "Hello, 这是一个A2A通信测试消息"
+    },
+    {
+      "role": "assistant",
+      "content": "通信测试成功！请提供Amazon商品URL和收货地址，我将为您完成一键购买。"
+    },
+    {
+      "role": "user",
+      "content": "Hello, 这是一个A2A通信测试消息"
+    },
+    {
+      "role": "assistant",
+      "content": "通信测试成功！请提供Amazon商品URL和收货地址，我将为您完成一键购买。"
+    }
+  ],
+  "session_id": "cb5fbfb2-962b-46ae-aabc-ab46d7ad1b09",
+  "user_id": "default_user",
+  "current_state": "browsing",
+  "last_updated": "2025-06-28T22:00:35.420361"
+}

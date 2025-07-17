@@ -1,0 +1,46 @@
+{
+  "conversation_history": [
+    {
+      "user_input": "Hello, 这是一个A2A通信测试消息",
+      "ai_response": "<response>\n收到您的A2A通信测试消息。我是专业的Amazon购物助手，支持一键购买服务。如果您需要购买商品，请提供：\n1. Amazon商品URL或ASIN\n2. 收货地址信息\n3. 用户姓名和邮箱\n\n我可以立即为您完成支付流程。当前服务状态：Amazon和Fewsats支付工具均可用。\n</response>",
+      "timestamp": "2025-06-28T22:37:20.013665",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "qwen_agent_mcp"
+      ],
+      "thinking_content": ""
+    },
+    {
+      "user_input": "Hello, 这是一个A2A通信测试消息",
+      "ai_response": "<response>\n收到您的A2A通信测试消息。我是专业的Amazon购物助手，支持一键购买服务。如果您需要购买商品，请提供：\n1. Amazon商品URL或ASIN\n2. 收货地址信息\n3. 用户姓名和邮箱\n\n我可以立即为您完成支付流程。当前服务状态：Amazon和Fewsats支付工具均可用。\n</response>",
+      "timestamp": "2025-06-28T22:37:29.641928",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "qwen_agent_mcp"
+      ],
+      "thinking_content": ""
+    }
+  ],
+  "chat_history": [
+    {
+      "role": "user",
+      "content": "Hello, 这是一个A2A通信测试消息"
+    },
+    {
+      "role": "assistant",
+      "content": "<response>\n收到您的A2A通信测试消息。我是专业的Amazon购物助手，支持一键购买服务。如果您需要购买商品，请提供：\n1. Amazon商品URL或ASIN\n2. 收货地址信息\n3. 用户姓名和邮箱\n\n我可以立即为您完成支付流程。当前服务状态：Amazon和Fewsats支付工具均可用。\n</response>"
+    },
+    {
+      "role": "user",
+      "content": "Hello, 这是一个A2A通信测试消息"
+    },
+    {
+      "role": "assistant",
+      "content": "<response>\n收到您的A2A通信测试消息。我是专业的Amazon购物助手，支持一键购买服务。如果您需要购买商品，请提供：\n1. Amazon商品URL或ASIN\n2. 收货地址信息\n3. 用户姓名和邮箱\n\n我可以立即为您完成支付流程。当前服务状态：Amazon和Fewsats支付工具均可用。\n</response>"
+    }
+  ],
+  "session_id": "d33b8f1a-adba-4e35-af2b-926e8beba7fa",
+  "user_id": "default_user",
+  "current_state": "browsing",
+  "last_updated": "2025-06-28T22:37:29.641928"
+}

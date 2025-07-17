@@ -1,0 +1,28 @@
+{
+  "conversation_history": [
+    {
+      "user_input": "health check",
+      "ai_response": "All systems operational. How can I assist you today? I can help with Amazon product searches, purchases, or order status checks. Let me know what you need!",
+      "timestamp": "2025-06-29T20:33:17.331441",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "qwen_agent_mcp"
+      ],
+      "thinking_content": ""
+    }
+  ],
+  "chat_history": [
+    {
+      "role": "user",
+      "content": "health check"
+    },
+    {
+      "role": "assistant",
+      "content": "All systems operational. How can I assist you today? I can help with Amazon product searches, purchases, or order status checks. Let me know what you need!"
+    }
+  ],
+  "session_id": "05b8fbc0-8df6-4048-a7a3-1a4a423359b6",
+  "user_id": "default_user",
+  "current_state": "browsing",
+  "last_updated": "2025-06-29T20:33:17.331441"
+}

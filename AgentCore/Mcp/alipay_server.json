@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "mcp-server-alipay": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@alipay/mcp-server-alipay"
+      ],
+      "env": {
+        "AP_APP_ID": "9021000149642688",
+        "AP_APP_KEY": "MIIEpAIBAAKCAQEA0N9THbZZI2ItGIH1BeV0NNXtwGeDSU+OF7A7U7pmuktKTra6c/pMgGfCvv0DonSl5lwRNzJciXotBHkjION4DgwJyYVTqaLDNHCy6ILiD06R6DgvzVsPpkYQRsYe1YY6wC8ag4h2ogc2Ql+ZQaPJNmz+s+n+N4otp7mgtmsZSrj0DHbOTuvUaOwY1WSlr0Qfxy2fCBkwtC4eZIVs/bYmfms29D66vURlPaa+XOvluDmD0kqtQvBhM3GfqnVO9F0hSWc2mqI75YBy/Gjy9JAm5rftwq9nBXITn1tssbOYD8CmGWkxUZ/3nw4BY//OGrxn0R6YYRU8s8QKSfiCqPKUwwIDAQABAoIBAGRW1DvSzHF2CUnbrFRfzPpQxr0GPQhrwkvY6jcntY/K+XBk0Z9DX5rTvbc4HpXdSZEnK1IDzHZyjcu3UcvL2nGNEOqRNQap3PKFLT0LGwPVb7xJuZUCKLtsrwcAx/E1YWXPewIy/SKLKmKqQBpLTy7pH1ZYkzolFBed0fmv6198KcNloFfvkXhLQ2Ki7and72VfEI7y7IQ0uZ4VDPBmfiDe/TjTt9n1Fedj/eecnmiSGWvAftWU5wkdtSIS6E3p4b3L6ak2N8YB3iF1MwD5dpE3dKwwC4WXCIzqNkZ5ZrVft0o4WzxlF6YG671Kc/2rRXPMsLUQIVrt20FAvux4NKECgYEA8esY/96hJYhOCtp5B9m2sANBLUjlNTKVT441aLe0pkIZbHphLe77+hfaorHNUaMfmXvpJ3Jy5DRL7kCzgitIgjwCYoZQRdYH3pgxcIBpJ9VlZOsZnENeciN8JAI0wJWiQDonv0GEBqOKgQuv7owimomFzx8UfIbPG2o5Bd5d5XECgYEA3QfMWKzvrGorfHZBJePVndwNxGse6QfcM8PsDrwgdfy08bH0xIhgw9c9r0fMcXtdiTOFvkMDu3IJmNuvc9Z82Aoi0HGSXJyJd6cN1SHRgb/i8th5RxTl+NTdJub4Z3xHOnFlQrMfzaq9eMf0RWSynBWUX/Vj9UoMkcsWD41/M3MCgYEAiSelEMwDyOeyd2zN2amRbdEqjqYZbUO0a1pQ5YHhpbEsANiRaB1qNqx3hG4R3gsBy175HShCAyezNOzx2Qb5IP0szPchY7ao14ap4QKsm6zcw46XAoUfcs6zfybRCa7MQmW2SzS1yZ3G1Mrvf+trYvo9JuSUFNXJbd2XXsBns8ECgYEAg2kDgSUwSd3FhPX5vcE7W+Nc/A6EDh/yN4SgcBJBamSYX6ph0AcVINpzfia90ip6bfwH5BqLuYIPWqYiJki7aOZ91FfxoMYgpNbZToIQwYeIMsGpOS2fnNVRtrNTtJMa9hA9F+7PVcPRamHXRPqdhlb+JB8NEuS3nGaV8yE5IykCgYA/4lCc4DHSL67T+Yb/10PBYrJQZQCrMhI0Lp0oX2EBSA9NLvppIAgmnjvzBzLIVxxUDwx3rXHS6lYvfLUBX1oEZoW51rAw33j6u1PrgtUeHE+I5HmEx/1nwKn+8GXLyY11CGtIWymJmBlrmh8bveNYxpvtA7tYwx1KuwRsS/x0Yg==",
+        "AP_PUB_KEY": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxBOhSbjv8G8jV6R9i7TodSwF6Pa9wkpBxLW2KvCE1jVDLrUpqBL6uHx/SrqfKGg2b5aEnAofbSGd3wHe+VQv63GRUhR9YaHS4JVAlP/1xZqXrndzzU6babXOVAUQQS7JVao1NqghWeGmQna6fK8z+mZqmJZQTv81foAtVeSsGZGCSMSk0/nSauG23uHVZihB+PurFas9qg3Pp5RR8KoPs0I1Nrdw+dzfuQ98gof5X5gbWUKNA+1mBfsezkDam6UgtZhfaYx9Y++3YlpLpctQvOBxB6sZ+FlkoZPvbc1KL8PlyySW5C3fQxeAevVg5BnfVLtyoRPdabecS2Zfv3Rh3QIDAQAB",
+        "AP_CURRENT_ENV": "sandbox"
+      },
+      "disabled": false,
+      "autoApprove": [],
+      "clientRequestTimeout": 60000
+    }
+  }
+}

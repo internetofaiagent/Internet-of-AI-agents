@@ -1,0 +1,28 @@
+{
+  "conversation_history": [
+    {
+      "user_input": "测试消息",
+      "ai_response": "您好！您发送的是“测试消息”。请问您需要测试什么功能，或者有什么具体的帮助需求吗？例如，您可以询问产品信息、支付流程等。我会尽力为您提供帮助。",
+      "timestamp": "2025-06-27T12:10:31.962739",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "qwen_agent_mcp"
+      ],
+      "thinking_content": ""
+    }
+  ],
+  "chat_history": [
+    {
+      "role": "user",
+      "content": "测试消息"
+    },
+    {
+      "role": "assistant",
+      "content": "您好！您发送的是“测试消息”。请问您需要测试什么功能，或者有什么具体的帮助需求吗？例如，您可以询问产品信息、支付流程等。我会尽力为您提供帮助。"
+    }
+  ],
+  "session_id": "55d31b2c-52be-4996-986c-4862c7b3e066",
+  "user_id": "default_user",
+  "current_state": "browsing",
+  "last_updated": "2025-06-27T12:10:31.962739"
+}

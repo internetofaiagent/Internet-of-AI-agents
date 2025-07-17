@@ -1,0 +1,46 @@
+{
+  "conversation_history": [
+    {
+      "user_input": "Hello, 这是一个A2A通信测试消息",
+      "ai_response": "您好！这是一个A2A通信测试消息已成功接收。我是您的Amazon购物助手，随时可以为您处理商品购买请求。如果您有Amazon商品链接需要购买，请直接提供URL和收货信息，我将为您完成一键购买。当前工具状态：Amazon和Fewsats支付服务均可用。",
+      "timestamp": "2025-06-28T23:49:10.468487",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "qwen_agent_mcp"
+      ],
+      "thinking_content": ""
+    },
+    {
+      "user_input": "Hello, 这是一个A2A通信测试消息",
+      "ai_response": "您好！A2A通信测试消息已再次确认接收。我是您的Amazon购物助手，随时待命处理您的购买需求。如需购买商品，请提供Amazon商品链接和收货信息，我将为您完成一键购买。当前服务状态：Amazon搜索和支付工具均正常可用。",
+      "timestamp": "2025-06-28T23:49:17.572768",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "qwen_agent_mcp"
+      ],
+      "thinking_content": ""
+    }
+  ],
+  "chat_history": [
+    {
+      "role": "user",
+      "content": "Hello, 这是一个A2A通信测试消息"
+    },
+    {
+      "role": "assistant",
+      "content": "您好！这是一个A2A通信测试消息已成功接收。我是您的Amazon购物助手，随时可以为您处理商品购买请求。如果您有Amazon商品链接需要购买，请直接提供URL和收货信息，我将为您完成一键购买。当前工具状态：Amazon和Fewsats支付服务均可用。"
+    },
+    {
+      "role": "user",
+      "content": "Hello, 这是一个A2A通信测试消息"
+    },
+    {
+      "role": "assistant",
+      "content": "您好！A2A通信测试消息已再次确认接收。我是您的Amazon购物助手，随时待命处理您的购买需求。如需购买商品，请提供Amazon商品链接和收货信息，我将为您完成一键购买。当前服务状态：Amazon搜索和支付工具均正常可用。"
+    }
+  ],
+  "session_id": "35bdbd48-c8c8-42ea-9905-eb503d1db71a",
+  "user_id": "default_user",
+  "current_state": "browsing",
+  "last_updated": "2025-06-28T23:49:17.572768"
+}

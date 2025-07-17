@@ -1,0 +1,28 @@
+{
+  "conversation_history": [
+    {
+      "user_input": "health check",
+      "ai_response": "The system is healthy! Both Amazon and Fewsats MCP tools are available for use. I'm ready to help with Amazon product searches, payment offers, and X402 payments. How can I assist you today?",
+      "timestamp": "2025-06-29T01:01:23.361618",
+      "shopping_state": "browsing",
+      "tools_used": [
+        "qwen_agent_mcp"
+      ],
+      "thinking_content": ""
+    }
+  ],
+  "chat_history": [
+    {
+      "role": "user",
+      "content": "health check"
+    },
+    {
+      "role": "assistant",
+      "content": "The system is healthy! Both Amazon and Fewsats MCP tools are available for use. I'm ready to help with Amazon product searches, payment offers, and X402 payments. How can I assist you today?"
+    }
+  ],
+  "session_id": "1107f517-1fb8-403b-b95b-8706ba7b39a7",
+  "user_id": "default_user",
+  "current_state": "browsing",
+  "last_updated": "2025-06-29T01:01:23.361618"
+}

@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "paypal": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@paypal/mcp",
+        "--tools=all"
+      ],
+      "env": {
+        "PAYPAL_ACCESS_TOKEN": "A21AAI2mUi5mP-z0rLhZ1WmtD_CjDgHccpEqgizwuFYknqvLjRQVGacHDdBNDZxAdMgVv1dT-UOoMxaSEKWHWFPECfboA6arA",
+        "PAYPAL_ENVIRONMENT": "SANDBOX"
+      },
+      "clientRequestTimeout": 60000
+    }
+  }
+}
