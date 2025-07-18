@@ -1112,7 +1112,22 @@ def startup_sequence():
     # 3. 更新工作流编排器的A2A配置
     print("\n 第三步：更新A2A配置...")
     workflow_orchestrator._check_a2a_services()
-    
+
+    from flask import request, jsonify
+
+@app.route("/market-trade", methods=["POST"])
+def market_trade():
+    data = request.json
+    user_msg = data.get("message", "")
+
+    print("📩 收到 market-trade 请求:", user_msg)
+
+    # 临时模拟返回结果
+    return jsonify({
+        "success": True,
+        "response": f"✅ 已收到消息：{user_msg}"
+    })
+
     # 显示最终状态
     print("\n 系统状态总览:")
     print(" 架构特点:")
