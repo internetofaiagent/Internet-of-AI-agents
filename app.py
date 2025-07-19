@@ -1113,41 +1113,22 @@ def startup_sequence():
     print("\n 第三步：更新A2A配置...")
     workflow_orchestrator._check_a2a_services()
 
-from flask import Flask, request, jsonify
-from market_trade import MarketTradeServer, AgentCard, Task
-from python_a2a import TaskStatus, TaskState
 
-app = Flask(__name__)
-
-# 初始化你的智能代理
-agent = MarketTradeServer(AgentCard(
-    name="MarketTradeAgent",
-    description="Handles payment, blockchain, and storytelling tasks.",
-    url="http://localhost:5003"
-))
+    from flask import request, jsonify
 
 @app.route("/market-trade", methods=["POST"])
 def market_trade():
-    try:
-        data = request.get_json()
-        user_msg = data.get("message", "")
+    data = request.json
+    user_msg = data.get("message", "")
 
-        print(f"📩 收到 market-trade 消息: {user_msg}")
+    print("收到 market-trade 请求:", user_msg)
 
-        task = {
-            "message": {"content": {"text": user_msg}},
-            "artifacts": [],
-            "status": None
-        }
+    # 临时模拟返回结果
+    return jsonify({
+        "success": True,
+        "response": f"已收到消息：{user_msg}"
+    })
 
-        # 调用智能Agent
-        task = agent.handle_task(task)
-
-        result = task.artifacts[0]["parts"][0]["text"]
-        return jsonify({"success": True, "response": result})
-
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
 
     # 显示最终状态
     print("\n 系统状态总览:")
