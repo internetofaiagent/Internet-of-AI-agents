@@ -21,12 +21,6 @@ class Config:
     # IoTeX 网络配置
     IOTEX_RPC_URL = os.getenv('IOTEX_RPC_URL', 'https://babel-api.testnet.iotex.io')
     IOTEX_CHAIN_ID = int(os.getenv('IOTEX_CHAIN_ID', 4690))
-    
-    # Agent服务端口配置
-    MARKET_TRADE_PORT = int(os.getenv('MARKET_TRADE_PORT', 5003))
-    ALIPAY_A2A_PORT = int(os.getenv('ALIPAY_A2A_PORT', 5005))
-    AMAZON_A2A_PORT = int(os.getenv('AMAZON_A2A_PORT', 5011))
-    AMAZON_SHOPPING_A2A_PORT = int(os.getenv('AMAZON_SHOPPING_A2A_PORT', 5012))
 
 # 导出一个可直接使用的配置实例
 config = Config() 
