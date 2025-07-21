@@ -49,11 +49,6 @@ class AgentServerManager:
                 "script": "AgentCore/Society/a2a amazon agent.py",
                 "port": 5012,
                 "env_var": "AMAZON_SHOPPING_A2A_PORT"
-            },
-            "market_trade_agent": {
-                "script": "AgentCore/Agents/market_trade.py",
-                "port": 5003,
-                "env_var": "MARKET_TRADE_PORT"
             }
         }
         
@@ -1066,64 +1061,6 @@ def get_agents_status():
             'success': False,
             'error': str(e),
             'timestamp': datetime.now().isoformat()
-        }), 500
-
-# 新增市场交易API
-@app.route('/market-trade', methods=['POST'])
-def market_trade():
-    """处理市场交易请求，转发到Market Trade服务"""
-    try:
-        # 获取请求数据
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                'success': False,
-                'error': '请求格式错误，缺少请求数据',
-                'error_type': 'invalid_request'
-            }), 400
-            
-        # 获取Market Trade服务的端口
-        market_trade_port = getattr(config, 'MARKET_TRADE_PORT', 5003)
-        market_trade_url = f"http://localhost:{market_trade_port}/task"
-        
-        # 使用A2A客户端转发请求
-        if A2A_CLIENT_AVAILABLE:
-            try:
-                client = A2AClient(f"http://localhost:{market_trade_port}")
-                message = data.get('message', '')
-                if not message:
-                    return jsonify({
-                        'success': False,
-                        'error': '请求缺少message字段',
-                        'error_type': 'invalid_request'
-                    }), 400
-                    
-                response = client.ask(message)
-                return jsonify({
-                    'success': True,
-                    'response': response
-                })
-            except Exception as e:
-                logger.error(f"Market Trade服务调用失败: {str(e)}")
-                return jsonify({
-                    'success': False,
-                    'error': f'Market Trade服务不可用: {str(e)}',
-                    'error_type': 'service_unavailable'
-                }), 502
-        else:
-            logger.error("A2A客户端不可用，无法调用Market Trade服务")
-            return jsonify({
-                'success': False,
-                'error': 'A2A客户端不可用，无法调用Market Trade服务',
-                'error_type': 'configuration_error'
-            }), 502
-            
-    except Exception as e:
-        logger.error(f"处理Market Trade请求失败: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': f'服务器内部错误: {str(e)}',
-            'error_type': 'server_error'
         }), 500
 
 # 错误处理
