@@ -19,7 +19,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # --- Agent发现服务导入 ---
 try:
-    from agent_discovery import AgentDiscoveryService
+    from .agent_discovery import AgentDiscoveryService
     AGENT_DISCOVERY_AVAILABLE = True
     print("✅ Agent发现服务导入成功")
 except ImportError as e:
@@ -64,12 +64,18 @@ class AmazonServiceManager:
     def __init__(self):
         """初始化模型和配置"""
         print("🧠 [AmazonServer] Initializing the core AI model...")
+
+        # 设置环境变量（如果未设置）
+        if not os.environ.get('MODELSCOPE_SDK_TOKEN'):
+            os.environ['MODELSCOPE_SDK_TOKEN'] = '877a7051-f22f-4230-87e8-e0effb36a399'
+            print("🔧 设置MODELSCOPE_SDK_TOKEN环境变量")
+
         # 使用Qwen2.5模型替代GPT
         self.model = ModelFactory.create(
             model_platform=ModelPlatformType.MODELSCOPE,
             model_type='Qwen/Qwen2.5-72B-Instruct',
             model_config_dict={'temperature': 0.2},
-            api_key='877a7051-f22f-4230-87e8-e0effb36a399',
+            api_key=os.environ.get('MODELSCOPE_SDK_TOKEN'),
         )
         print("✅ [AmazonServer] AI model is ready.")
 
@@ -282,15 +288,8 @@ class AmazonServiceManager:
             return parsed_json
 
         except Exception as e:
-            logger.error(f"❌ Intent understanding failed: {str(e)}. Falling back to default.")
-            return {
-                "product_description": user_input,
-                "quantity": 1,
-                "max_price": None,
-                "min_rating": 4.0,
-                "delivery_urgency": "low",
-                "preferred_payment_methods": []
-            }
+            logger.error(f"❌ Intent understanding failed: {str(e)}")
+            raise Exception(f"ModelScope API调用失败，无法理解用户意图: {str(e)}")
 
     def set_strategy_from_intent(self, intent: Dict) -> PurchaseStrategy:
         """根据解析出的意图，设定本次购买的策略"""
@@ -488,8 +487,8 @@ class AmazonServiceManager:
         它会解析意图，搜索，并根据策略自动选择最优商品进行购买。
         """
         try:
-            # 1. 简化的意图理解（不依赖ModelScope API）
-            intent = self.simple_understand_intent(user_input)
+            # 1. 理解意图（必须使用ModelScope API）
+            intent = await self.understand_intent(user_input)
 
             # 2. 设定策略
             strategy = self.set_strategy_from_intent(intent)
@@ -560,56 +559,34 @@ class AmazonServiceManager:
 
     async def classify_user_intent(self, user_input: str) -> str:
         """分类用户意图：搜索新商品 vs 确认购买已有商品"""
-        # 简化的意图分类，不依赖ModelScope API
-        user_input_lower = user_input.lower()
+        system_prompt = f"""
+        You are an intent classifier. Classify the user's input into one of these categories:
+        - "search": User wants to search for new products
+        - "purchase_confirmation": User wants to confirm purchase of a specific product they mentioned before
 
-        # 购买确认的关键词
-        confirmation_keywords = [
-            "确认购买", "我要购买", "购买第", "买第", "确认", "下订单", "创建订单",
-            "purchase", "buy this", "confirm", "order", "第1个", "第一个", "first one",
-            "item 1", "商品1", "选择第", "要这个"
-        ]
+        User input: "{user_input}"
 
-        # 检查是否包含确认购买的关键词
-        for keyword in confirmation_keywords:
-            if keyword in user_input_lower:
-                logger.info(f"✅ Intent classified as: purchase_confirmation (keyword: {keyword})")
-                return "purchase_confirmation"
+        Respond with only one word: either "search" or "purchase_confirmation"
+        """
 
-        # 默认为搜索意图
-        logger.info(f"✅ Intent classified as: search (default)")
-        return "search"
+        try:
+            intent_agent = ChatAgent(system_message=system_prompt, model=self.model)
+            response = await intent_agent.astep(user_input)
+            intent_type = response.msgs[0].content.strip().lower()
 
-    def simple_understand_intent(self, user_input: str) -> Dict:
-        """简化的意图理解，不依赖ModelScope API"""
-        # 提取基本信息
-        intent = {
-            "product_description": user_input,  # 添加缺失的字段
-            "query": user_input,
-            "max_price": 2000.0,  # 默认最大价格
-            "min_rating": 4.0,    # 默认最小评分
-            "quantity": 1,        # 默认数量
-            "delivery_urgency": "low",  # 添加缺失的字段
-            "preferred_payment_methods": [],  # 添加缺失的字段
-            "category": "electronics"  # 默认分类
-        }
+            # 确保返回值在预期范围内
+            if intent_type in ["search", "purchase_confirmation"]:
+                logger.info(f"✅ Intent classified as: {intent_type}")
+                return intent_type
+            else:
+                logger.warning(f"⚠️ Unexpected intent classification: {intent_type}, defaulting to search")
+                return "search"
 
-        # 简单的价格提取
-        import re
-        price_match = re.search(r'预算.*?(\d+)', user_input)
-        if price_match:
-            intent["max_price"] = float(price_match.group(1))
+        except Exception as e:
+            logger.error(f"❌ Intent classification failed: {e}")
+            raise Exception(f"ModelScope API调用失败，无法分类用户意图: {str(e)}")
 
-        # 简单的数量提取
-        quantity_match = re.search(r'(\d+)个|(\d+)台|(\d+)部', user_input)
-        if quantity_match:
-            for group in quantity_match.groups():
-                if group:
-                    intent["quantity"] = int(group)
-                    break
 
-        logger.info(f"✅ Simple intent understanding: {intent}")
-        return intent
 
     async def handle_purchase_confirmation(self, user_input: str) -> Dict:
         """处理用户的购买确认请求，从用户输入中提取商品信息"""
@@ -678,41 +655,9 @@ class AmazonServiceManager:
             elif price is None:
                 price = 0.0
 
-            # 如果价格为0，尝试从最近的搜索结果中获取价格
+            # 如果价格为0，直接报错，不使用fallback
             if price <= 0:
-                logger.info("⚠️ 价格为0，尝试从最近搜索结果获取价格...")
-
-                # 尝试重新搜索获取价格
-                try:
-                    # 简化的意图理解
-                    intent = self.simple_understand_intent(user_input)
-                    strategy = self.set_strategy_from_intent(intent)
-
-                    # 搜索商品获取价格
-                    products = await self.search_amazon_products(intent, strategy)
-
-                    if products and len(products) > 0:
-                        # 使用第一个商品的价格
-                        first_product = products[0]
-                        price = first_product.price
-                        product_info["title"] = first_product.title
-                        product_info["asin"] = first_product.asin
-                        product_info["url"] = first_product.url
-
-                        logger.info(f"✅ 从搜索结果获取价格: ${price:.2f} for {first_product.title}")
-                    else:
-                        # 如果搜索失败，使用合理的默认价格
-                        product_title = product_info.get("title", "").lower()
-                        if "iphone 15 pro" in product_title:
-                            price = 683.12  # 基于日志中看到的实际价格
-                        else:
-                            price = 999.00
-                        logger.info(f"⚠️ 搜索失败，使用默认价格: ${price:.2f}")
-
-                except Exception as e:
-                    logger.error(f"❌ 重新搜索商品失败: {e}")
-                    price = 683.12  # 使用日志中看到的实际iPhone价格
-                    logger.info(f"⚠️ 使用备用价格: ${price:.2f}")
+                raise Exception("无法获取商品价格信息，ModelScope API可能失败")
 
             logger.info(f"💰 最终商品价格: ${price:.2f}")
 
@@ -813,10 +758,27 @@ class AmazonA2AServer(A2AServer, AmazonServiceManager):
         AmazonServiceManager.__init__(self)
         print("✅ [AmazonA2AServer] Server fully initialized and ready.")
 
+    def extract_user_input_from_workflow_context(self, text: str) -> str:
+        """从工作流上下文中提取纯净的用户输入"""
+        # 检查是否包含工作流上下文格式
+        if "工作流上下文：" in text and "用户消息:" in text:
+            # 提取用户消息部分
+            try:
+                user_msg_start = text.find("用户消息:")
+                if user_msg_start != -1:
+                    user_input = text[user_msg_start + len("用户消息:"):].strip()
+                    logger.info(f"🔍 从工作流上下文中提取用户输入: '{user_input}'")
+                    return user_input
+            except Exception as e:
+                logger.error(f"❌ 提取用户输入失败: {e}")
+
+        # 如果不是工作流上下文格式，直接返回原文
+        return text
+
     def handle_task(self, task):
         """A2A服务器的核心处理函数。"""
         text = task.message.get("content", {}).get("text", "")
-        print(f"📩 [AmazonA2AServer] Received task: '{text}'")
+        print(f"📩 [AmazonA2AServer] Received task: '{text[:100]}...' (length: {len(text)})")
 
         # 处理健康检查请求，避免触发业务逻辑
         if text.lower().strip() in ["health check", "health", "ping", ""]:
@@ -833,14 +795,14 @@ class AmazonA2AServer(A2AServer, AmazonServiceManager):
                 # 使用nest_asyncio允许在已有事件循环中运行新的事件循环
                 import nest_asyncio
                 nest_asyncio.apply()
-                
+
                 # 使用asyncio.run运行异步函数，它会创建新的事件循环
                 import asyncio
-                
+
                 # 首先分类用户意图
                 intent_type = asyncio.run(self.classify_user_intent(text))
                 print(f"🧠 [AmazonA2AServer] Intent classified as: {intent_type}")
-                
+
                 # 根据意图类型选择处理方式
                 if intent_type == "purchase_confirmation":
                     print("🛒 [AmazonA2AServer] Processing purchase confirmation...")
