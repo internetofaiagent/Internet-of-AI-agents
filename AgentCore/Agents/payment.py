@@ -20,11 +20,16 @@ from python_a2a import A2AServer, run_server, AgentCard, AgentSkill, TaskStatus,
 class AlipayOrderService:
     def __init__(self, model=None):
         """初始化支付宝订单服务"""
+        # 设置环境变量（如果未设置）
+        if not os.environ.get('MODELSCOPE_SDK_TOKEN'):
+            os.environ['MODELSCOPE_SDK_TOKEN'] = '877a7051-f22f-4230-87e8-e0effb36a399'
+            print("🔧 设置MODELSCOPE_SDK_TOKEN环境变量")
+
         self.model = model or ModelFactory.create(
             model_platform=ModelPlatformType.MODELSCOPE,
             model_type='Qwen/Qwen2.5-72B-Instruct',
             model_config_dict={'temperature': 0.2},
-            api_key='877a7051-f22f-4230-87e8-e0effb36a399',
+            api_key=os.environ.get('MODELSCOPE_SDK_TOKEN'),
         )
 
     def generate_order_number(self):
