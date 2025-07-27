@@ -20,7 +20,7 @@ from typing import Dict, Any, Optional, List
 from enum import Enum
 import asyncio
 import nest_asyncio
-from AgentCore.Society.user_agent_a2a import AmazonServiceManager
+from AgentCore.Agents.user_agent_a2a import AmazonServiceManager
 
 # 设置nest_asyncio以支持嵌套事件循环
 nest_asyncio.apply()
@@ -35,18 +35,23 @@ class AgentServerManager:
     def __init__(self):
         self.agent_processes = {}
         self.agent_configs = {
+            "agent_registry": {
+                "script": "AgentCore/Agents/agent_registry.py",
+                "port": 5001,
+                "env_var": "AGENT_REGISTRY_PORT"
+            },
             "user_agent": {
-                "script": "AgentCore/Society/user_agent_a2a.py",
+                "script": "AgentCore/Agents/user_agent_a2a.py",
                 "port": 5011,
                 "env_var": "AMAZON_A2A_PORT"  # user_agent_a2a.py期望这个环境变量
             },
             "payment_agent": {
-                "script": "AgentCore/Society/payment.py", 
+                "script": "AgentCore/Agents/payment.py",
                 "port": 5005,
                 "env_var": "ALIPAY_A2A_PORT"
             },
             "amazon_agent": {
-                "script": "AgentCore/Society/a2a amazon agent.py",
+                "script": "AgentCore/Agents/a2a_amazon_agent.py",
                 "port": 5012,
                 "env_var": "AMAZON_SHOPPING_A2A_PORT"
             }
@@ -342,18 +347,13 @@ agent_manager = AgentServerManager()
 
 # 导入所有Agent的业务逻辑类
 try:
-    from AgentCore.Society.user_agent_a2a import AmazonServiceManager as UserServiceManager
-    from AgentCore.Society.payment import AlipayOrderService
-    # 导入正确的Amazon Agent (文件名有空格需要特殊处理)
-    import importlib.util
-    amazon_agent_path = os.path.join(os.path.dirname(__file__), "AgentCore", "Society", "a2a amazon agent.py")
-    spec = importlib.util.spec_from_file_location("amazon_agent", amazon_agent_path)
-    amazon_agent_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(amazon_agent_module)
-    AmazonShoppingServiceManager = amazon_agent_module.AmazonShoppingServiceManager
-    ThinkingMode = amazon_agent_module.ThinkingMode
+    from AgentCore.Agents.agent_registry import AgentRegistry, AgentRegistryServer
+    from AgentCore.Agents.user_agent_a2a import AmazonServiceManager as UserServiceManager
+    from AgentCore.Agents.payment import AlipayOrderService
+    # 导入最新的Amazon Agent
+    from AgentCore.Agents.a2a_amazon_agent import AmazonShoppingServiceManager, ThinkingMode
     ALL_AGENTS_AVAILABLE = True
-    print( "所有Agent模块导入成功")
+    print("✅ 所有Agent模块导入成功")
 except ImportError as e:
     print(" Agent导入失败: " + str(e))
     ALL_AGENTS_AVAILABLE = False
@@ -400,6 +400,7 @@ class FixedWorkflowOrchestrator:
     def __init__(self):
         # 只保留A2A Agent配置，移除所有本地Agent实例
         self.a2a_agents = {
+            "agent_registry": {"url": "http://localhost:5001", "name": "Agent Registry"},
             "user_agent": {"url": "http://localhost:5011", "name": "User Agent"},
             "payment_agent": {"url": "http://localhost:5005", "name": "Payment Agent"},
             "amazon_agent": {"url": "http://localhost:5012", "name": "Amazon Agent"}
@@ -1112,7 +1113,24 @@ def startup_sequence():
     # 3. 更新工作流编排器的A2A配置
     print("\n 第三步：更新A2A配置...")
     workflow_orchestrator._check_a2a_services()
-    
+
+
+    from flask import request, jsonify
+
+@app.route("/market-trade", methods=["POST"])
+def market_trade():
+    data = request.json
+    user_msg = data.get("message", "")
+
+    print("收到 market-trade 请求:", user_msg)
+
+    # 临时模拟返回结果
+    return jsonify({
+        "success": True,
+        "response": f"已收到消息：{user_msg}"
+    })
+
+
     # 显示最终状态
     print("\n 系统状态总览:")
     print(" 架构特点:")
