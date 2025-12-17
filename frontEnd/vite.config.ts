@@ -10,27 +10,27 @@ export default defineConfig({
     proxy: {
       // 代理所有API请求到后端Flask服务器
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5002',
         changeOrigin: true,
         secure: false
       },
       '/youxuan-shopping': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5002',
         changeOrigin: true,
         secure: false
       },
       '/market-trade': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5002',
         changeOrigin: true,
         secure: false
       },
       '/config': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5002',
         changeOrigin: true,
         secure: false
       },
       '/agents': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5002',
         changeOrigin: true,
         secure: false
       }

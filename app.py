@@ -1160,7 +1160,7 @@ def market_trade():
     print("   • Agent间协作通信")
     print("   • 多用户多会话支持")
     print()
-    print(" 访问地址: http://localhost:5000")
+    print(" 访问地址: http://localhost:5002")
     print(" 主要API:")
     print("   • POST /api/chat - 聊天接口（纯A2A模式）")
     print("   • GET /api/health - A2A服务健康检查")
@@ -1169,7 +1169,7 @@ def market_trade():
     print("   • POST /api/agents/stop - 停止Agent服务器")
     print()
     print(" 使用示例:")
-    print("   curl -X POST http://localhost:5000/api/chat \\")
+    print("   curl -X POST http://localhost:5002/api/chat \\")
     print("        -H 'Content-Type: application/json' \\")
     print("        -d '{\"message\":\"我想买iPhone 15\",\"user_id\":\"user123\"}'")
     print()
@@ -1191,7 +1191,7 @@ if __name__ == '__main__':
         logger.info(" 启动Flask Web服务器...")
         app.run(
             host='0.0.0.0',
-            port=5000,
+            port=5002,
             debug=False,
             threaded=True  # 启用多线程支持异步调用和A2A通信
         )
