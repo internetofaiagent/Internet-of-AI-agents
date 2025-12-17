@@ -392,6 +392,7 @@ class WorkflowState(Enum):
     PAYMENT_VERIFICATION = "payment_verification" # Payment Agent验证支付状态
     ADDRESS_COLLECTION = "address_collection"     # Amazon Agent收集地址信息
     ORDER_PROCESSING = "order_processing"         # Amazon Agent处理最终订单
+    MERCHANT_ACCEPTANCE = "merchant_acceptance"   # 商家agent接单确认
     WORKFLOW_COMPLETE = "workflow_complete"       # 工作流完成
 
 class FixedWorkflowOrchestrator:
@@ -508,8 +509,13 @@ class FixedWorkflowOrchestrator:
                 return WorkflowState.ORDER_PROCESSING.value
                 
         elif current_state == WorkflowState.ORDER_PROCESSING.value:
-            # 检测完成
-            if any(keyword in response_lower for keyword in ["完成", "成功", "confirm", "complete", "success"]):
+            # 检测订单处理完成，转到商家接单状态
+            if any(keyword in response_lower for keyword in ["完成", "成功", "订单", "处理", "confirm", "complete", "success", "order"]):
+                return WorkflowState.MERCHANT_ACCEPTANCE.value
+                
+        elif current_state == WorkflowState.MERCHANT_ACCEPTANCE.value:
+            # 检测商家接单完成
+            if any(keyword in response_lower for keyword in ["接单", "接受", "确认", "accepted", "confirmed", "完成", "complete"]):
                 return WorkflowState.WORKFLOW_COMPLETE.value
         
         # 默认保持当前状态
@@ -678,6 +684,14 @@ User Agent分析结果: """ + user_response + """
         
         response = self._call_agent_pure_a2a("amazon_agent", amazon_message, context)
         
+        # 保存地址信息到session_data，供后续订单处理使用
+        session_data = session_state.setdefault('session_data', {})
+        if 'shipping_address' not in session_data:
+            session_data['shipping_address'] = {}
+        # 尝试从用户输入中提取地址信息（简单处理）
+        if any(keyword in user_input.lower() for keyword in ["地址", "address", "街道", "street"]):
+            session_data['shipping_address']['raw_input'] = user_input
+        
         # 检查是否可以进入订单处理
         new_state = self._analyze_agent_response_for_state_transition(response, session_state['workflow_state'])
         session_state['workflow_state'] = new_state
@@ -708,7 +722,29 @@ User Agent分析结果: """ + user_response + """
         
         response = self._call_agent_pure_a2a("amazon_agent", amazon_message, context)
         
-        # 检查是否完成
+        # 保存订单信息到session_data，供后续商家接单使用
+        session_data = session_state.setdefault('session_data', {})
+        if 'order_info' not in session_data:
+            session_data['order_info'] = {
+                'order_id': f"ORDER_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                'user_id': user_id,
+                'merchant_type': 'amazon',
+                'created_at': datetime.now().isoformat(),
+                'product_info': session_data.get('product_info', {}),
+                'payment_info': session_data.get('payment_info', {}),
+                'shipping_address': session_data.get('shipping_address', {})
+            }
+        else:
+            # 更新现有订单信息
+            order_info = session_data['order_info']
+            if not order_info.get('product_info'):
+                order_info['product_info'] = session_data.get('product_info', {})
+            if not order_info.get('payment_info'):
+                order_info['payment_info'] = session_data.get('payment_info', {})
+            if not order_info.get('shipping_address'):
+                order_info['shipping_address'] = session_data.get('shipping_address', {})
+        
+        # 检查是否完成，如果完成则转到商家接单状态
         new_state = self._analyze_agent_response_for_state_transition(response, session_state['workflow_state'])
         session_state['workflow_state'] = new_state
         
@@ -718,6 +754,140 @@ User Agent分析结果: """ + user_response + """
             "workflow_state": new_state,
             "agent_called": "amazon_agent"
         }
+    
+    def handle_merchant_acceptance(self, user_input: str, session_state: Dict[str, Any], user_id: str, session_id: str) -> Dict[str, Any]:
+        """处理商家接单状态 - 通过agent_registry通知商家agent接单"""
+        logger.info("🔄 商家接单状态 - 通知商家agent接单")
+        
+        try:
+            # 获取订单信息
+            session_data = session_state.get('session_data', {})
+            order_info = session_data.get('order_info', {})
+            
+            # 如果没有订单信息，尝试从对话历史中提取
+            if not order_info:
+                # 从最近的对话中提取商品和支付信息
+                conversation_history = session_state.get('conversation_history', [])
+                order_info = {
+                    'order_id': f"ORDER_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                    'user_id': user_id,
+                    'merchant_type': 'amazon',
+                    'product_info': {},
+                    'payment_info': {},
+                    'shipping_address': {}
+                }
+            
+            # 构建订单数据
+            order_data = {
+                "order_id": order_info.get('order_id', f"ORDER_{datetime.now().strftime('%Y%m%d%H%M%S')}"),
+                "user_id": order_info.get('user_id', user_id),
+                "merchant_type": order_info.get('merchant_type', 'amazon'),
+                "product_info": order_info.get('product_info', {}),
+                "payment_info": order_info.get('payment_info', {}),
+                "shipping_address": order_info.get('shipping_address', {})
+            }
+            
+            # 调用agent_registry创建订单并通知商家agent
+            registry_url = self.a2a_agents.get("agent_registry", {}).get("url", "http://localhost:5001")
+            
+            if not A2A_CLIENT_AVAILABLE:
+                logger.warning("⚠️ A2A客户端不可用，无法通知商家agent")
+                return {
+                    "success": False,
+                    "response": "系统错误：无法连接到Agent注册中心",
+                    "workflow_state": session_state['workflow_state'],
+                    "error": "A2A客户端不可用"
+                }
+            
+            import json
+            registry_client = A2AClient(registry_url)
+            
+            # 创建订单
+            create_order_message = json.dumps(order_data, ensure_ascii=False)
+            registry_response = registry_client.ask(f"create_order: {create_order_message}")
+            
+            logger.info(f"📦 Agent Registry响应: {registry_response[:200] if registry_response else 'None'}...")
+            
+            # 解析响应
+            try:
+                if registry_response and registry_response.strip().startswith("{"):
+                    response_data = json.loads(registry_response)
+                    if response_data.get("success"):
+                        order_id = response_data.get("order", {}).get("order_id", order_data["order_id"])
+                        logger.info(f"✅ 订单已创建并加入监听队列: {order_id}")
+                        
+                        # 等待一小段时间让监听线程处理
+                        time.sleep(2)
+                        
+                        # 查询订单状态
+                        order_status_response = registry_client.ask(f"get_order: {order_id}")
+                        logger.info(f"📊 订单状态: {order_status_response[:200] if order_status_response else 'None'}...")
+                        
+                        # 检查订单是否已被接单
+                        if order_status_response and order_status_response.strip().startswith("{"):
+                            status_data = json.loads(order_status_response)
+                            order_status = status_data.get("order", {}).get("status", "pending")
+                            
+                            if order_status == "accepted":
+                                response_text = f"""✅ 商家已接单！
+
+订单ID: {order_id}
+订单状态: 商家已确认接单
+
+商家agent已接受订单并开始处理。订单将很快完成交付。"""
+                                new_state = WorkflowState.WORKFLOW_COMPLETE.value
+                            else:
+                                response_text = f"""📦 订单已创建，等待商家接单...
+
+订单ID: {order_id}
+订单状态: {order_status}
+
+系统已通知商家agent，正在等待接单确认。"""
+                                new_state = session_state['workflow_state']  # 保持当前状态，等待接单
+                        else:
+                            response_text = f"""📦 订单已创建并已通知商家agent
+
+订单ID: {order_id}
+
+系统已自动通知商家agent接单，请稍候。"""
+                            new_state = session_state['workflow_state']
+                    else:
+                        error_msg = response_data.get("error", "未知错误")
+                        response_text = f"❌ 创建订单失败: {error_msg}"
+                        new_state = session_state['workflow_state']
+                else:
+                    # 响应不是JSON格式，直接使用
+                    response_text = f"""📦 订单处理中...
+
+{registry_response if registry_response else '订单已提交到Agent注册中心，等待商家agent接单。'}"""
+                    new_state = session_state['workflow_state']
+                    
+            except json.JSONDecodeError as e:
+                logger.warning(f"⚠️ 解析Agent Registry响应失败: {e}")
+                response_text = f"""📦 订单已提交
+
+{registry_response if registry_response else '订单已提交到Agent注册中心，系统将自动通知商家agent接单。'}"""
+                new_state = session_state['workflow_state']
+            
+            session_state['workflow_state'] = new_state
+            
+            return {
+                "success": True,
+                "response": response_text,
+                "workflow_state": new_state,
+                "agent_called": "agent_registry"
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ 处理商家接单状态失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "success": False,
+                "response": f"系统错误：处理商家接单时发生异常: {str(e)}",
+                "workflow_state": session_state['workflow_state'],
+                "error": str(e)
+            }
     
     def handle_workflow_complete(self, user_input: str, session_state: Dict[str, Any], user_id: str, session_id: str) -> Dict[str, Any]:
         """处理工作流完成状态 - 让User Agent自主处理后续对话"""
@@ -787,6 +957,8 @@ User Agent分析结果: """ + user_response + """
                 result = self.handle_address_collection(user_input, session_state, user_id, session_id)
             elif current_state == WorkflowState.ORDER_PROCESSING:
                 result = self.handle_order_processing(user_input, session_state, user_id, session_id)
+            elif current_state == WorkflowState.MERCHANT_ACCEPTANCE:
+                result = self.handle_merchant_acceptance(user_input, session_state, user_id, session_id)
             elif current_state == WorkflowState.WORKFLOW_COMPLETE:
                 result = self.handle_workflow_complete(user_input, session_state, user_id, session_id)
             else:
