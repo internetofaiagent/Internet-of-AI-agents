@@ -465,6 +465,118 @@ class IotexTokenToolkit(BaseToolkit):
             return {"success": False, "error": f"Invalid parameter: {str(ve)}"}
         except Exception as e:
             return {"success": False, "error": f"TransferFrom failed: {str(e)}"}
+    
+    def store_order_data(
+        self,
+        private_key: str,
+        order_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        将订单数据存储到区块链
+        
+        通过发送一笔包含订单信息的交易，将订单数据永久记录在区块链上。
+        订单信息会被序列化为JSON并编码到交易数据中。
+        
+        Args:
+            private_key (str): 用于签名交易的私钥（带或不带0x前缀）
+            order_data (dict): 订单数据字典，包含以下字段：
+                - order_id: 订单ID
+                - user_id: 用户ID
+                - merchant_type: 商家类型
+                - product_info: 商品信息
+                - payment_info: 支付信息
+                - shipping_address: 收货地址
+                - status: 订单状态
+                - created_at: 创建时间
+                - accepted_at: 接单时间
+                - completed_at: 完成时间
+        
+        Returns:
+            dict: 包含交易哈希、区块号等信息的字典，如果失败则包含错误信息
+        """
+        try:
+            import json
+            import hashlib
+            
+            # 确保私钥格式正确
+            if not private_key.startswith("0x"):
+                private_key = "0x" + private_key
+            
+            # 检查web3连接
+            if not self.web3.is_connected():
+                return {"success": False, "error": "Unable to connect to IoTeX testnet"}
+            
+            # 获取账户
+            account = Account.from_key(private_key)
+            from_address = account.address
+            
+            # 序列化订单数据为JSON
+            order_json = json.dumps(order_data, ensure_ascii=False, sort_keys=True)
+            
+            # 计算订单哈希（用于验证）
+            order_hash = hashlib.sha256(order_json.encode('utf-8')).hexdigest()
+            
+            # 准备交易数据：订单ID长度(1字节) + 订单ID + 订单哈希(32字节)
+            order_id = order_data.get("order_id", "")
+            order_id_bytes = order_id.encode('utf-8')
+            order_hash_bytes = bytes.fromhex(order_hash)
+            transaction_data = bytes([len(order_id_bytes)]) + order_id_bytes + order_hash_bytes
+            
+            # 获取nonce
+            nonce = self.web3.eth.get_transaction_count(from_address)
+            
+            # 估算gas：基础21000 + 数据gas (每字节68 gas)
+            data_gas = len(transaction_data) * 68
+            total_gas = 21000 + data_gas
+            
+            # 构建交易：发送0 IOTX到自己的地址，订单信息编码在data字段中
+            transaction = {
+                'to': self.web3.to_checksum_address(from_address),  # 发送给自己
+                'value': 0,  # 0 IOTX
+                'data': transaction_data,  # 订单ID + 订单哈希
+                'gas': total_gas,
+                'gasPrice': self.web3.eth.gas_price,
+                'nonce': nonce,
+                'chainId': self.chain_id
+            }
+            
+            # 签名交易
+            signed_txn = self.web3.eth.account.sign_transaction(transaction, private_key)
+            
+            # 发送交易
+            raw_transaction = getattr(signed_txn, 'rawTransaction', getattr(signed_txn, 'raw_transaction', None))
+            if raw_transaction is None:
+                return {"success": False, "error": "Failed to get raw transaction data"}
+            
+            tx_hash = self.web3.eth.send_raw_transaction(raw_transaction)
+            tx_hash_hex = tx_hash.hex()
+            
+            # 等待交易确认
+            receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
+            
+            if receipt.status == 1:
+                return {
+                    "success": True,
+                    "message": "✅ Order data stored on blockchain successfully",
+                    "transaction_hash": tx_hash_hex,
+                    "block_number": receipt.blockNumber,
+                    "gas_used": receipt.gasUsed,
+                    "order_id": order_id,
+                    "order_hash": order_hash,
+                    "order_json": order_json,  # 包含完整订单信息
+                    "explorer_url": f"https://testnet.iotexscan.io/tx/{tx_hash_hex}"
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": "❌ Transaction failed",
+                    "transaction_hash": tx_hash_hex
+                }
+                
+        except ValueError as ve:
+            return {"success": False, "error": f"Invalid input: {str(ve)}"}
+        except Exception as e:
+            return {"success": False, "error": f"Store order data failed: {str(e)}"}
         
     def get_tools(self) -> List[FunctionTool]:
         """
@@ -477,5 +589,6 @@ class IotexTokenToolkit(BaseToolkit):
             FunctionTool(self.erc20_allowance),
             FunctionTool(self.erc20_contract_info),
             FunctionTool(self.erc20_approve),
-            FunctionTool(self.erc20_transfer_from)
+            FunctionTool(self.erc20_transfer_from),
+            FunctionTool(self.store_order_data)
         ]

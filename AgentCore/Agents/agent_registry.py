@@ -14,8 +14,7 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
 from python_a2a import A2AServer, run_server, AgentCard, AgentSkill, TaskStatus, TaskState, A2AClient
-from web3 import Web3
-from eth_account import Account
+from AgentCore.Tools.iotextoken_toolkit import IotexTokenToolkit
 
 
 class OrderStatus(Enum):
@@ -149,27 +148,43 @@ class AgentRegistry:
         self.blockchain_private_key = os.environ.get("BLOCKCHAIN_PRIVATE_KEY", "")
         self.blockchain_wallet_address = os.environ.get("BLOCKCHAIN_WALLET_ADDRESS", "")
         
-        # 初始化Web3连接
+        # ERC20 ABI（用于初始化IotexTokenToolkit）
+        self.erc20_abi = [
+            {"constant": False, "inputs": [{"name": "_spender", "type": "address"}, {"name": "_value", "type": "uint256"}], "name": "approve", "outputs": [{"name": "", "type": "bool"}], "type": "function"},
+            {"constant": False, "inputs": [{"name": "_from", "type": "address"}, {"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}], "name": "transferFrom", "outputs": [{"name": "", "type": "bool"}], "type": "function"},
+            {"constant": True, "inputs": [{"name": "_owner", "type": "address"}, {"name": "_spender", "type": "address"}], "name": "allowance", "outputs": [{"name": "", "type": "uint256"}], "type": "function"},
+            {"constant": True, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "balance", "type": "uint256"}], "type": "function"},
+            {"constant": True, "inputs": [], "name": "decimals", "outputs": [{"name": "", "type": "uint8"}], "type": "function"}
+        ]
+        
+        # 初始化IotexTokenToolkit
+        self.blockchain_toolkit = None
         if self.blockchain_enabled:
             try:
-                self.web3 = Web3(Web3.HTTPProvider(self.iotex_rpc_url))
-                if self.web3.is_connected():
-                    print(f"✅ 区块链连接成功: {self.iotex_rpc_url}")
+                self.blockchain_toolkit = IotexTokenToolkit(
+                    rpc_url=self.iotex_rpc_url,
+                    erc20_abi=self.erc20_abi,
+                    chain_id=self.iotex_chain_id
+                )
+                if self.blockchain_toolkit.web3.is_connected():
+                    print(f"✅ 区块链工具包初始化成功: {self.iotex_rpc_url}")
                     if self.blockchain_private_key:
                         # 从私钥获取地址（如果未提供地址）
                         if not self.blockchain_wallet_address:
+                            from eth_account import Account
                             account = Account.from_key(self.blockchain_private_key)
                             self.blockchain_wallet_address = account.address
                         print(f"📝 区块链钱包地址: {self.blockchain_wallet_address}")
                 else:
                     print(f"⚠️ 区块链连接失败，上链功能将不可用")
                     self.blockchain_enabled = False
+                    self.blockchain_toolkit = None
             except Exception as e:
-                print(f"⚠️ 区块链初始化失败: {e}，上链功能将不可用")
+                print(f"⚠️ 区块链工具包初始化失败: {e}，上链功能将不可用")
                 self.blockchain_enabled = False
+                self.blockchain_toolkit = None
         else:
             print("ℹ️ 区块链功能已禁用（BLOCKCHAIN_ENABLED=false）")
-            self.web3 = None
         
         # 预注册已知的agent
         self._preregister_known_agents()
@@ -480,8 +495,8 @@ class AgentRegistry:
     def store_order_to_blockchain(self, order: Order) -> Optional[str]:
         """将订单信息存储到区块链
         
-        通过发送一笔包含订单信息的交易，将订单数据永久记录在区块链上。
-        订单信息会被序列化为JSON并编码到交易数据中。
+        通过调用IotexTokenToolkit的工具，将订单数据永久记录在区块链上。
+        上链信息包括：订单ID、用户ID、商家类型、商品信息、支付信息、完成时间等。
         
         Args:
             order: 要上链的订单对象
@@ -493,6 +508,10 @@ class AgentRegistry:
             print("⚠️ 区块链功能未启用，跳过上链")
             return None
         
+        if not self.blockchain_toolkit:
+            print("⚠️ 区块链工具包未初始化，无法上链")
+            return None
+        
         if not self.blockchain_private_key:
             print("⚠️ 未配置区块链私钥，无法上链")
             return None
@@ -502,7 +521,7 @@ class AgentRegistry:
             return order.blockchain_tx_hash
         
         try:
-            # 准备订单数据
+            # 准备订单数据，包含所有需要上链的信息
             order_data = {
                 "order_id": order.order_id,
                 "user_id": order.user_id,
@@ -517,72 +536,32 @@ class AgentRegistry:
                 "timestamp": datetime.now().isoformat()
             }
             
-            # 序列化为JSON
-            order_json = json.dumps(order_data, ensure_ascii=False, sort_keys=True)
-            
-            # 计算订单哈希（用于验证）
-            order_hash = hashlib.sha256(order_json.encode('utf-8')).hexdigest()
-            
             print(f"🔗 开始将订单 {order.order_id} 上链...")
-            print(f"   订单哈希: {order_hash}")
+            print(f"   订单信息: 订单ID={order.order_id}, 用户ID={order.user_id}, 商家类型={order.merchant_type}")
+            print(f"   完成时间: {order.completed_at.isoformat() if order.completed_at else 'N/A'}")
             
-            # 确保私钥格式正确
-            private_key = self.blockchain_private_key
-            if not private_key.startswith("0x"):
-                private_key = "0x" + private_key
+            # 调用IotexTokenToolkit的store_order_data方法
+            result = self.blockchain_toolkit.store_order_data(
+                private_key=self.blockchain_private_key,
+                order_data=order_data
+            )
             
-            # 获取账户
-            account = Account.from_key(private_key)
-            from_address = account.address
-            
-            # 获取nonce
-            nonce = self.web3.eth.get_transaction_count(from_address)
-            
-            # 构建交易：发送0 IOTX到自己的地址，订单信息编码在data字段中
-            # 将订单ID和哈希编码到交易数据中（格式：订单ID长度(1字节) + 订单ID + 订单哈希）
-            order_id_bytes = order.order_id.encode('utf-8')
-            order_hash_bytes = bytes.fromhex(order_hash)
-            # 组合数据：订单ID长度(1字节) + 订单ID + 订单哈希(32字节)
-            transaction_data = bytes([len(order_id_bytes)]) + order_id_bytes + order_hash_bytes
-            
-            # 估算gas：基础21000 + 数据gas (每字节68 gas)
-            data_gas = len(transaction_data) * 68
-            total_gas = 21000 + data_gas
-            
-            transaction = {
-                'to': self.web3.to_checksum_address(from_address),  # 发送给自己
-                'value': 0,  # 0 IOTX
-                'data': transaction_data,  # 订单ID + 订单哈希
-                'gas': total_gas,
-                'gasPrice': self.web3.eth.gas_price,
-                'nonce': nonce,
-                'chainId': self.iotex_chain_id
-            }
-            
-            # 签名交易
-            signed_txn = self.web3.eth.account.sign_transaction(transaction, private_key)
-            
-            # 发送交易
-            raw_transaction = getattr(signed_txn, 'rawTransaction', getattr(signed_txn, 'raw_transaction', None))
-            if raw_transaction is None:
-                print("❌ 无法获取签名交易数据")
-                return None
-            
-            tx_hash = self.web3.eth.send_raw_transaction(raw_transaction)
-            tx_hash_hex = tx_hash.hex()
-            
-            print(f"📤 交易已发送，等待确认...")
-            print(f"   交易哈希: {tx_hash_hex}")
-            print(f"   浏览器链接: https://testnet.iotexscan.io/tx/{tx_hash_hex}")
-            
-            # 等待交易确认
-            receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
-            
-            if receipt.status == 1:
-                print(f"✅ 交易确认成功，区块号: {receipt.blockNumber}")
-                return tx_hash_hex
+            if result.get("success"):
+                tx_hash = result.get("transaction_hash")
+                block_number = result.get("block_number")
+                order_hash = result.get("order_hash")
+                explorer_url = result.get("explorer_url")
+                
+                print(f"✅ 订单上链成功!")
+                print(f"   交易哈希: {tx_hash}")
+                print(f"   区块号: {block_number}")
+                print(f"   订单哈希: {order_hash}")
+                print(f"   浏览器链接: {explorer_url}")
+                
+                return tx_hash
             else:
-                print(f"❌ 交易失败")
+                error_msg = result.get("error", "未知错误")
+                print(f"❌ 订单上链失败: {error_msg}")
                 return None
                 
         except Exception as e:
