@@ -775,6 +775,48 @@ class AgentRegistryServer(A2AServer):
                         "success": False,
                         "error": f"订单不存在: {order_id}"
                     }, indent=2, ensure_ascii=False)
+            
+            elif "update_order_status:" in text.lower():
+                # 更新订单状态
+                try:
+                    # 提取JSON部分
+                    json_part = text.split("update_order_status:")[-1].strip()
+                    update_data = json.loads(json_part)
+                    
+                    order_id = update_data.get("order_id")
+                    status = update_data.get("status")
+                    merchant_response = update_data.get("merchant_response")
+                    
+                    if not order_id or not status:
+                        response_text = json.dumps({
+                            "success": False,
+                            "error": "缺少必要参数: order_id 和 status"
+                        }, indent=2, ensure_ascii=False)
+                    else:
+                        success = self.registry.update_order_status(order_id, status, merchant_response)
+                        if success:
+                            order = self.registry.get_order(order_id)
+                            response_text = json.dumps({
+                                "success": True,
+                                "message": f"订单状态已更新为: {status}",
+                                "order_id": order_id,
+                                "order": order.to_dict() if order else None
+                            }, indent=2, ensure_ascii=False)
+                        else:
+                            response_text = json.dumps({
+                                "success": False,
+                                "error": f"订单不存在或更新失败: {order_id}"
+                            }, indent=2, ensure_ascii=False)
+                except json.JSONDecodeError as e:
+                    response_text = json.dumps({
+                        "success": False,
+                        "error": f"JSON格式错误: {str(e)}"
+                    }, indent=2, ensure_ascii=False)
+                except Exception as e:
+                    response_text = json.dumps({
+                        "success": False,
+                        "error": f"更新订单状态失败: {str(e)}"
+                    }, indent=2, ensure_ascii=False)
                 
             else:
                 response_text = """Agent注册中心支持的命令:
@@ -786,6 +828,7 @@ class AgentRegistryServer(A2AServer):
 - get_order: <订单ID> - 查询订单信息
 - get_pending_orders [merchant: <商家类型>] - 获取待处理订单列表
 - notify_merchant: <订单ID> - 手动通知商家agent接单
+- update_order_status: <JSON数据> - 更新订单状态 (包含order_id, status, merchant_response)
 - health check: 健康检查"""
             
             task.status = TaskStatus(state=TaskState.COMPLETED)

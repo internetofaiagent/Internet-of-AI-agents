@@ -702,11 +702,78 @@ class AmazonServiceManager:
                 
                 logger.info("✅ Successfully received payment info from Payment Agent")
                 
-                # 构建最终响应
-                solution.update({
-                    'payment_info': payment_response,
-                    'status': 'payment_created',
-                    'response': f"""✅ 购买确认成功！
+                # 支付成功后，调用agent_registry创建订单
+                try:
+                    registry_url = os.environ.get("AGENT_REGISTRY_URL", "http://localhost:5001")
+                    logger.info(f"📦 调用Agent Registry创建订单: {registry_url}")
+                    
+                    # 准备订单数据
+                    order_data = {
+                        "user_id": os.environ.get("USER_ID", "unknown"),
+                        "merchant_type": "amazon",
+                        "product_info": {
+                            "asin": solution['asin'],
+                            "title": solution['title'],
+                            "price": solution['unit_price'],
+                            "quantity": solution['quantity'],
+                            "total_amount": solution['total_amount'],
+                            "currency": solution['currency'],
+                            "url": solution['product_url']
+                        },
+                        "payment_info": {
+                            "payment_response": payment_response,
+                            "status": "payment_created"
+                        },
+                        "shipping_address": {}  # 收货地址将在后续流程中补充
+                    }
+                    
+                    # 调用agent_registry创建订单
+                    registry_client = A2AClient(registry_url)
+                    create_order_message = json.dumps(order_data, ensure_ascii=False)
+                    registry_response = registry_client.ask(f"create_order: {create_order_message}")
+                    
+                    logger.info(f"✅ Agent Registry响应: {registry_response[:200] if registry_response else 'None'}...")
+                    
+                    # 解析响应获取订单ID
+                    order_id = None
+                    if registry_response:
+                        try:
+                            if registry_response.strip().startswith("{"):
+                                response_data = json.loads(registry_response)
+                                if response_data.get("success"):
+                                    order_id = response_data.get("order", {}).get("order_id")
+                                    logger.info(f"✅ 订单已创建: {order_id}")
+                        except json.JSONDecodeError:
+                            # 如果响应不是JSON，尝试从文本中提取订单ID
+                            pass
+                    
+                    # 构建最终响应
+                    order_status_msg = f"\n\n📦 **订单已创建**: {order_id}" if order_id else "\n\n📦 **订单创建中**..."
+                    solution.update({
+                        'payment_info': payment_response,
+                        'order_id': order_id,
+                        'status': 'payment_created',
+                        'response': f"""✅ 购买确认成功！
+
+**商品信息**:
+• 名称: {solution['title']}
+• 数量: {solution['quantity']}
+• 总价: ${solution['total_amount']:.2f} USD
+
+**支付信息**:
+{payment_response}
+{order_status_msg}
+
+订单已提交，商家将尽快处理您的订单。"""
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"⚠️ 调用Agent Registry创建订单失败: {e}")
+                    # 即使创建订单失败，也不影响支付成功的响应
+                    solution.update({
+                        'payment_info': payment_response,
+                        'status': 'payment_created',
+                        'response': f"""✅ 购买确认成功！
 
 **商品信息**:
 • 名称: {solution['title']}
@@ -716,8 +783,8 @@ class AmazonServiceManager:
 **支付信息**:
 {payment_response}
 
-请完成支付以继续订单处理。"""
-                })
+⚠️ 订单创建遇到问题，但支付已成功。请联系客服处理。"""
+                    })
                 
                 return solution
                 

@@ -14,7 +14,7 @@ from dataclasses import dataclass, asdict
 from typing import Dict, Any, List, Optional, Tuple
 
 # --- A2A 协议导入 ---
-from python_a2a import A2AServer, run_server, AgentCard, AgentSkill, TaskStatus, TaskState
+from python_a2a import A2AServer, run_server, AgentCard, AgentSkill, TaskStatus, TaskState, A2AClient
 
 
 
@@ -1340,8 +1340,12 @@ class AmazonShoppingA2AAgent(A2AServer, AmazonShoppingServiceManager):
         else:
             response_text = ""
             try:
+                # 检查是否是订单接单请求（来自agent_registry）
+                if "新订单需要处理" in text or ("订单ID:" in text and "请确认接单" in text):
+                    print("📦 检测到订单接单请求，进入接单确认模式...")
+                    response_text = self.process_order_acceptance(text)
                 # 检查是否是支付确认请求（模拟模式）
-                if "支付已完成" in text and "请确认Amazon订单" in text:
+                elif "支付已完成" in text and "请确认Amazon订单" in text:
                     print("💳 检测到支付确认请求，进入模拟下单模式...")
                     response_text = self.process_mock_order_confirmation(text)
                 else:
@@ -1441,6 +1445,196 @@ class AmazonShoppingA2AAgent(A2AServer, AmazonShoppingServiceManager):
         except Exception as e:
             print(f"❌ 处理模拟订单确认时出错: {e}")
             return f"❌ Amazon订单确认失败: {str(e)}"
+
+    def process_order_acceptance(self, text: str) -> str:
+        """处理订单接单确认请求 - 商家agent接单接口"""
+        print("📦 开始处理订单接单确认...")
+        
+        try:
+            import re
+            import json
+            from datetime import datetime
+            
+            # 解析订单信息
+            order_id = None
+            user_id = None
+            product_info = {}
+            payment_info = {}
+            shipping_address = {}
+            
+            # 提取订单ID
+            order_id_match = re.search(r'订单ID:\s*([^\n]+)', text)
+            if order_id_match:
+                order_id = order_id_match.group(1).strip()
+            
+            # 提取用户ID
+            user_id_match = re.search(r'用户ID:\s*([^\n]+)', text)
+            if user_id_match:
+                user_id = user_id_match.group(1).strip()
+            
+            # 提取商品信息（JSON格式）- 使用更健壮的解析方法
+            product_info_start = text.find('商品信息:')
+            if product_info_start != -1:
+                # 找到JSON开始位置
+                json_start = text.find('{', product_info_start)
+                if json_start != -1:
+                    # 使用栈来匹配完整的JSON对象
+                    brace_count = 0
+                    json_end = json_start
+                    for i in range(json_start, len(text)):
+                        if text[i] == '{':
+                            brace_count += 1
+                        elif text[i] == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                json_end = i + 1
+                                break
+                    try:
+                        product_info = json.loads(text[json_start:json_end])
+                    except json.JSONDecodeError as e:
+                        print(f"⚠️ 商品信息JSON解析失败: {e}，使用默认值")
+                        product_info = {}
+            
+            # 提取支付信息（JSON格式）
+            payment_info_start = text.find('支付信息:')
+            if payment_info_start != -1:
+                json_start = text.find('{', payment_info_start)
+                if json_start != -1:
+                    brace_count = 0
+                    json_end = json_start
+                    for i in range(json_start, len(text)):
+                        if text[i] == '{':
+                            brace_count += 1
+                        elif text[i] == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                json_end = i + 1
+                                break
+                    try:
+                        payment_info = json.loads(text[json_start:json_end])
+                    except json.JSONDecodeError as e:
+                        print(f"⚠️ 支付信息JSON解析失败: {e}，使用默认值")
+                        payment_info = {}
+            
+            # 提取收货地址（JSON格式）
+            shipping_address_start = text.find('收货地址:')
+            if shipping_address_start != -1:
+                json_start = text.find('{', shipping_address_start)
+                if json_start != -1:
+                    brace_count = 0
+                    json_end = json_start
+                    for i in range(json_start, len(text)):
+                        if text[i] == '{':
+                            brace_count += 1
+                        elif text[i] == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                json_end = i + 1
+                                break
+                    try:
+                        shipping_address = json.loads(text[json_start:json_end])
+                    except json.JSONDecodeError as e:
+                        print(f"⚠️ 收货地址JSON解析失败: {e}，使用默认值")
+                        shipping_address = {}
+            
+            # 验证必要信息
+            if not order_id:
+                return "❌ 订单接单失败：缺少订单ID"
+            
+            print(f"📋 订单ID: {order_id}")
+            print(f"👤 用户ID: {user_id}")
+            print(f"🛒 商品信息: {product_info}")
+            print(f"💳 支付信息: {payment_info}")
+            print(f"📍 收货地址: {shipping_address}")
+            
+            # 生成Amazon订单号（13位标准格式）
+            import random
+            import string
+            amazon_order_number = ''.join(random.choices(string.ascii_uppercase + string.digits, k=13))
+            
+            # 提取商品名称和价格
+            product_name = product_info.get('name', product_info.get('title', '未知商品'))
+            product_price = product_info.get('price', product_info.get('usd_price', 0))
+            
+            # 构建接单确认响应
+            acceptance_response = f"""✅ **订单接单确认成功**
+
+**订单信息：**
+- 订单ID: {order_id}
+- Amazon订单号: {amazon_order_number}
+- 用户ID: {user_id}
+- 接单时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+**商品信息：**
+- 商品名称: {product_name}
+- 商品价格: ${product_price:.2f} USD
+- 商品详情: {json.dumps(product_info, ensure_ascii=False, indent=2) if product_info else '无'}
+
+**支付信息：**
+- 支付状态: 已确认
+- 支付详情: {json.dumps(payment_info, ensure_ascii=False, indent=2) if payment_info else '无'}
+
+**收货地址：**
+- 地址信息: {json.dumps(shipping_address, ensure_ascii=False, indent=2) if shipping_address else '无'}
+
+**订单处理状态：**
+- 订单状态: 已接单，正在处理中
+- 预计发货时间: 1-2个工作日
+- 配送方式: Amazon Prime
+- 预计送达: 3-5个工作日
+
+**接单确认：**
+✅ 商家已确认接单，订单将按照上述信息进行处理和配送。
+
+感谢您的订单！"""
+            
+            print(f"✅ 订单接单确认完成: {order_id} (Amazon订单号: {amazon_order_number})")
+            
+            # 接单成功后，通知agent_registry更新订单状态为completed，以触发上链
+            try:
+                registry_url = os.environ.get("AGENT_REGISTRY_URL", "http://localhost:5001")
+                print(f"📦 通知Agent Registry更新订单状态: {registry_url}")
+                
+                # 准备更新订单状态的数据
+                update_data = {
+                    "order_id": order_id,
+                    "status": "completed",
+                    "merchant_response": acceptance_response
+                }
+                
+                # 调用agent_registry更新订单状态
+                registry_client = A2AClient(registry_url)
+                update_message = json.dumps(update_data, ensure_ascii=False)
+                registry_response = registry_client.ask(f"update_order_status: {update_message}")
+                
+                print(f"✅ Agent Registry响应: {registry_response[:200] if registry_response else 'None'}...")
+                
+                # 解析响应确认更新成功
+                if registry_response:
+                    try:
+                        if registry_response.strip().startswith("{"):
+                            response_data = json.loads(registry_response)
+                            if response_data.get("success"):
+                                print(f"✅ 订单状态已更新为completed: {order_id}")
+                                print(f"🔗 订单将自动触发上链流程")
+                            else:
+                                print(f"⚠️ 订单状态更新失败: {response_data.get('error', '未知错误')}")
+                    except json.JSONDecodeError:
+                        print(f"⚠️ Agent Registry响应格式异常，但订单接单已成功")
+                
+            except Exception as e:
+                print(f"⚠️ 通知Agent Registry更新订单状态失败: {e}")
+                # 即使更新状态失败，也不影响接单确认的响应
+                import traceback
+                traceback.print_exc()
+            
+            return acceptance_response
+            
+        except Exception as e:
+            import traceback
+            print(f"❌ 处理订单接单确认时出错: {e}")
+            traceback.print_exc()
+            return f"❌ 订单接单确认失败: {str(e)}"
 
     def send_mock_shipping_notification(self, order_number: str, product_name: str, price: float):
         """发送模拟发货通知给User Agent"""
