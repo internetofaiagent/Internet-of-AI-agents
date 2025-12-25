@@ -4,7 +4,10 @@ import json
 import asyncio
 import logging
 import aiohttp
-from typing import Dict, List, Optional
+import time
+import re
+from datetime import datetime
+from typing import Dict, List, Optional, Any
 from enum import Enum
 from dataclasses import dataclass
 
@@ -95,6 +98,17 @@ class AmazonServiceManager:
         else:
             self.agent_discovery = None
             print("⚠️ [AmazonServer] Agent发现服务不可用，将使用硬编码URL")
+        
+        # 订单存储（用于存储用户订单信息，包括交付通知）
+        self.user_orders: Dict[str, Dict[str, Any]] = {}
+        logger.info("✅ [AmazonServiceManager] 订单存储已初始化")
+        
+        # 用户钱包地址配置（可以从环境变量或用户输入获取）
+        self.user_wallet_address = os.environ.get("USER_WALLET_ADDRESS", "")
+        if self.user_wallet_address:
+            logger.info(f"✅ [AmazonServiceManager] 用户钱包地址已从环境变量加载: {self.user_wallet_address[:10]}...")
+        else:
+            logger.info("ℹ️ [AmazonServiceManager] 用户钱包地址未配置，将从用户输入中获取")
 
     async def _get_session(self):
         """获取或创建aiohttp会话，确保在当前事件循环中创建"""
@@ -113,6 +127,7 @@ class AmazonServiceManager:
             # 回退到硬编码URL
             return {
                 "payment_agent_url": "http://0.0.0.0:5005",
+                "merchant_agent_url": "http://0.0.0.0:5020",
                 "amazon_agent_url": "http://0.0.0.0:5012",
                 "discovery_used": False
             }
@@ -125,6 +140,7 @@ class AmazonServiceManager:
                 workflow = workflow_result["workflow"]
 
                 payment_url = None
+                merchant_url = None
                 amazon_url = None
 
                 # 提取Payment Agent URL
@@ -136,13 +152,23 @@ class AmazonServiceManager:
                     payment_url = "http://0.0.0.0:5005"
                     print(f"🔍 使用默认Payment Agent (payment.py) at {payment_url}")
 
-                # 提取Amazon Agent URL
+                # 提取Merchant Agent URL
+                if workflow["merchant_agent"]:
+                    merchant_url = workflow["merchant_agent"]["url"]
+                    print(f"🔍 发现Merchant Agent: {workflow['merchant_agent']['name']} at {merchant_url}")
+                else:
+                    # 如果没有发现，使用默认的merchant agent
+                    merchant_url = "http://0.0.0.0:5020"
+                    print(f"🔍 使用默认Merchant Agent at {merchant_url}")
+
+                # 提取Amazon Agent URL（保留向后兼容）
                 if workflow["amazon_agent"]:
                     amazon_url = workflow["amazon_agent"]["url"]
                     print(f"🔍 发现Amazon Agent: {workflow['amazon_agent']['name']} at {amazon_url}")
 
                 return {
                     "payment_agent_url": payment_url or "http://0.0.0.0:5005",
+                    "merchant_agent_url": merchant_url or "http://0.0.0.0:5020",
                     "amazon_agent_url": amazon_url or "http://0.0.0.0:5012",
                     "discovery_used": True,
                     "workflow_info": workflow_result
@@ -152,6 +178,7 @@ class AmazonServiceManager:
                 # 回退到硬编码URL
                 return {
                     "payment_agent_url": "http://localhost:5005",
+                    "merchant_agent_url": "http://localhost:5020",
                     "amazon_agent_url": "http://localhost:5012",
                     "discovery_used": False,
                     "error": workflow_result.get('error')
@@ -480,6 +507,114 @@ class AmazonServiceManager:
         logger.info(f"💰 Initiating MOCK payment of ${amount} to {merchant_id}")
         await asyncio.sleep(1) # 模拟网络延迟
         return {"status": "success", "transaction_id": "mock-tx-123456"}
+    
+    def _call_merchant_agent_with_retry(
+        self, 
+        merchant_agent_url: str, 
+        order_data: Dict[str, Any],
+        max_retries: int = 3,
+        retry_delay: float = 1.0
+    ) -> Dict[str, Any]:
+        """
+        调用商家 Agent 发送订单，包含错误处理和重试机制
+        
+        Args:
+            merchant_agent_url: 商家 Agent 的 URL
+            order_data: 订单数据字典
+            max_retries: 最大重试次数
+            retry_delay: 重试延迟（秒）
+            
+        Returns:
+            包含调用结果的字典，包含 success, message, order_id 等字段
+        """
+        logger.info(f"📦 [UserAgent] 准备调用商家 Agent: {merchant_agent_url}")
+        
+        # 构造订单请求（JSON格式）
+        order_request_json = json.dumps(order_data, ensure_ascii=False, indent=2)
+        order_request_text = f"""接收订单: {order_request_json}"""
+        
+        last_error = None
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(f"🔄 [UserAgent] 尝试调用商家 Agent (第 {attempt}/{max_retries} 次)")
+                
+                # 使用 A2AClient 连接商家 Agent
+                merchant_client = A2AClient(merchant_agent_url)
+                
+                # 发送订单请求
+                response = merchant_client.ask(order_request_text)
+                
+                logger.info(f"📥 [UserAgent] 收到商家 Agent 响应: {response[:200] if response else 'None'}...")
+                
+                # 尝试解析响应（可能是 JSON 格式或文本格式）
+                try:
+                    # 尝试解析 JSON 格式的响应
+                    if "{" in response and "}" in response:
+                        start = response.find("{")
+                        end = response.rfind("}") + 1
+                        json_str = response[start:end]
+                        parsed_response = json.loads(json_str)
+                        
+                        if parsed_response.get("success"):
+                            order_id = parsed_response.get("order_id", "UNKNOWN")
+                            logger.info(f"✅ [UserAgent] 商家 Agent 成功接收订单: {order_id}")
+                            return {
+                                "success": True,
+                                "message": f"订单已成功发送至商家，订单ID: {order_id}",
+                                "order_id": order_id,
+                                "merchant_response": parsed_response
+                            }
+                        else:
+                            error_msg = parsed_response.get("error", "未知错误")
+                            logger.warning(f"⚠️ [UserAgent] 商家 Agent 返回错误: {error_msg}")
+                            last_error = error_msg
+                except (json.JSONDecodeError, KeyError) as e:
+                    # 如果不是 JSON 格式，检查文本响应
+                    if any(keyword in response.lower() for keyword in ["成功", "成功接收", "订单已", "success", "accepted"]):
+                        logger.info(f"✅ [UserAgent] 商家 Agent 成功接收订单（文本格式响应）")
+                        return {
+                            "success": True,
+                            "message": "订单已成功发送至商家",
+                            "merchant_response": response
+                        }
+                    else:
+                        logger.warning(f"⚠️ [UserAgent] 商家 Agent 响应格式异常: {response[:100]}")
+                        last_error = f"响应格式异常: {response[:100]}"
+                
+                # 如果成功但没有明确的成功标识，也认为是成功的（避免误判）
+                if attempt == max_retries:
+                    logger.info(f"✅ [UserAgent] 商家 Agent 响应收到，视为成功")
+                    return {
+                        "success": True,
+                        "message": "订单已发送至商家（响应已收到）",
+                        "merchant_response": response
+                    }
+                
+            except Exception as e:
+                last_error = str(e)
+                logger.error(f"❌ [UserAgent] 调用商家 Agent 失败 (第 {attempt}/{max_retries} 次): {e}")
+                
+                # 如果不是最后一次尝试，等待后重试
+                if attempt < max_retries:
+                    logger.info(f"⏳ [UserAgent] 等待 {retry_delay} 秒后重试...")
+                    time.sleep(retry_delay)
+                    # 指数退避：每次重试延迟时间翻倍
+                    retry_delay *= 2
+                else:
+                    logger.error(f"❌ [UserAgent] 调用商家 Agent 失败，已达到最大重试次数")
+        
+        # 所有重试都失败
+        error_message = f"调用商家 Agent 失败（已重试 {max_retries} 次）"
+        if last_error:
+            error_message += f": {last_error}"
+        
+        return {
+            "success": False,
+            "error": error_message,
+            "last_error": last_error,
+            "merchant_agent_url": merchant_agent_url
+        }
 
     async def autonomous_purchase(self, user_input: str) -> Dict:
         """
@@ -702,9 +837,85 @@ class AmazonServiceManager:
                 
                 logger.info("✅ Successfully received payment info from Payment Agent")
                 
+                # 支付完成后，调用商家 Agent 发送订单
+                merchant_agent_url = agent_urls.get("merchant_agent_url", "http://localhost:5020")
+                
+                # 尝试从支付响应中提取支付订单号
+                payment_order_id = None
+                payment_transaction_hash = None
+                try:
+                    # 尝试从响应中提取支付订单号（可能是JSON或文本格式）
+                    if "订单号" in payment_response or "order" in payment_response.lower():
+                        order_match = re.search(r'订单[号码]*[:\s]*([A-Za-z0-9_-]+)', payment_response, re.IGNORECASE)
+                        if not order_match:
+                            order_match = re.search(r'order[_\s]*id[:\s]*([A-Za-z0-9_-]+)', payment_response, re.IGNORECASE)
+                        if order_match:
+                            payment_order_id = order_match.group(1)
+                    
+                    # 尝试提取交易哈希或交易流水号
+                    hash_match = re.search(r'[0-9a-fA-F]{32,64}', payment_response)
+                    if hash_match:
+                        payment_transaction_hash = hash_match.group(0)
+                    else:
+                        # 尝试提取交易流水号（格式如：ORDER_TXN）
+                        txn_match = re.search(r'流水号[:\s]*([A-Za-z0-9_-]+)', payment_response, re.IGNORECASE)
+                        if txn_match:
+                            payment_transaction_hash = txn_match.group(1)
+                except Exception as e:
+                    logger.warning(f"⚠️ 提取支付信息失败: {e}")
+                
+                # 生成订单ID
+                order_id = f"ORDER_{int(time.time())}"
+                
+                # 获取用户 Agent URL（用于交付通知）
+                user_agent_url = self.agent_card.url if hasattr(self, 'agent_card') and self.agent_card else None
+                
+                # 获取用户钱包地址（从用户输入或配置中获取）
+                user_wallet_address = self._get_user_wallet_address(user_input)
+                if user_wallet_address:
+                    logger.info(f"✅ [UserAgent] 已获取用户钱包地址: {user_wallet_address[:10]}...")
+                else:
+                    logger.warning("⚠️ [UserAgent] 未获取到用户钱包地址，上链功能可能受限")
+                
+                # 构造订单数据
+                order_data = {
+                    "order_id": order_id,
+                    "user_id": "user_" + str(int(time.time())),  # 实际应用中应该从用户会话获取
+                    "amount": solution['total_amount'],
+                    "currency": solution['currency'],
+                    "product_info": {
+                        "product_name": solution['title'],
+                        "product_id": solution.get('asin', ''),
+                        "quantity": solution['quantity'],
+                        "unit_price": solution['unit_price'],
+                        "product_url": solution.get('product_url', '')
+                    },
+                    "payment_info": {
+                        "payment_order_id": payment_order_id,
+                        "payment_status": "paid",
+                        "payment_method": "alipay",
+                        "payment_transaction_hash": payment_transaction_hash,
+                        "payment_amount": solution['total_amount'],
+                        "payment_currency": solution['currency'],
+                        "paid_at": datetime.now().isoformat()
+                    },
+                    "user_agent_url": user_agent_url,  # 传递用户 Agent URL
+                    "user_wallet_address": user_wallet_address  # 传递用户钱包地址
+                }
+                
+                logger.info(f"📦 [UserAgent] 准备发送订单至商家 Agent: {order_id}")
+                merchant_result = self._call_merchant_agent_with_retry(
+                    merchant_agent_url=merchant_agent_url,
+                    order_data=order_data
+                )
+                
                 # 构建最终响应
+                merchant_status = "✅ 订单已发送至商家" if merchant_result.get("success") else "⚠️ 订单发送至商家失败，但支付已成功"
+                merchant_detail = merchant_result.get("message", "")
+                
                 solution.update({
                     'payment_info': payment_response,
+                    'merchant_result': merchant_result,
                     'status': 'payment_created',
                     'response': f"""✅ 购买确认成功！
 
@@ -715,6 +926,10 @@ class AmazonServiceManager:
 
 **支付信息**:
 {payment_response}
+
+**商家订单**:
+{merchant_status}
+{merchant_detail}
 
 请完成支付以继续订单处理。"""
                 })
@@ -756,7 +971,239 @@ class AmazonA2AServer(A2AServer, AmazonServiceManager):
     def __init__(self, agent_card: AgentCard):
         A2AServer.__init__(self, agent_card=agent_card)
         AmazonServiceManager.__init__(self)
+        self.agent_card = agent_card  # 保存 agent_card 以便后续使用
         print("✅ [AmazonA2AServer] Server fully initialized and ready.")
+    
+    def _is_delivery_notification(self, text: str) -> bool:
+        """
+        检查消息是否是交付通知
+        
+        Args:
+            text: 消息文本
+            
+        Returns:
+            如果是交付通知返回 True，否则返回 False
+        """
+        text_lower = text.lower()
+        # 检查是否包含交付通知的关键词
+        delivery_keywords = [
+            "订单交付完成通知",
+            "delivery_completed",
+            "订单.*已成功交付",
+            "delivery.*completed",
+            "交付完成"
+        ]
+        
+        # 检查是否包含 JSON 格式的交付通知
+        if "type" in text and "delivery_completed" in text:
+            return True
+        
+        # 检查是否包含交付通知的关键词
+        for keyword in delivery_keywords:
+            if re.search(keyword, text_lower):
+                return True
+        
+        return False
+    
+    def _parse_delivery_notification(self, text: str) -> Optional[Dict[str, Any]]:
+        """
+        解析交付通知 JSON
+        
+        Args:
+            text: 包含交付通知的消息文本
+            
+        Returns:
+            解析后的交付通知字典，如果解析失败返回 None
+        """
+        try:
+            # 尝试从文本中提取 JSON
+            if "{" in text and "}" in text:
+                start = text.find("{")
+                end = text.rfind("}") + 1
+                json_str = text[start:end]
+                
+                try:
+                    notification_data = json.loads(json_str)
+                    
+                    # 验证是否是有效的交付通知
+                    if notification_data.get("type") == "delivery_completed":
+                        logger.info(f"✅ [UserAgent] 成功解析交付通知: {notification_data.get('order_id', 'UNKNOWN')}")
+                        return notification_data
+                    else:
+                        logger.warning(f"⚠️ [UserAgent] JSON 格式正确但不是交付通知: {notification_data.get('type', 'unknown')}")
+                        return None
+                        
+                except json.JSONDecodeError as e:
+                    logger.warning(f"⚠️ [UserAgent] JSON 解析失败: {e}")
+                    return None
+            else:
+                logger.warning("⚠️ [UserAgent] 消息中未找到 JSON 格式的交付通知")
+                return None
+                
+        except Exception as e:
+            logger.error(f"❌ [UserAgent] 解析交付通知时出错: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return None
+    
+    def _store_delivery_info(self, delivery_notification: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        存储交付信息到本地订单记录
+        
+        Args:
+            delivery_notification: 交付通知字典
+            
+        Returns:
+            包含存储结果的字典
+        """
+        try:
+            order_id = delivery_notification.get("order_id")
+            if not order_id:
+                return {
+                    "success": False,
+                    "error": "交付通知中缺少订单ID"
+                }
+            
+            # 获取或创建订单记录
+            if order_id not in self.user_orders:
+                # 如果订单不存在，创建新记录
+                self.user_orders[order_id] = {
+                    "order_id": order_id,
+                    "created_at": datetime.now().isoformat(),
+                    "status": "unknown"
+                }
+                logger.info(f"📝 [UserAgent] 创建新订单记录: {order_id}")
+            
+            # 更新订单记录
+            order_record = self.user_orders[order_id]
+            order_record["delivery_info"] = {
+                "delivered_at": delivery_notification.get("delivered_at"),
+                "delivery_proof": delivery_notification.get("delivery_proof", {}),
+                "delivery_info": delivery_notification.get("delivery_info", {}),
+                "order_summary": delivery_notification.get("order_summary", {}),
+                "notification_received_at": datetime.now().isoformat()
+            }
+            order_record["status"] = "delivered"
+            order_record["updated_at"] = datetime.now().isoformat()
+            
+            logger.info(f"✅ [UserAgent] 交付信息已存储: {order_id}")
+            
+            return {
+                "success": True,
+                "order_id": order_id,
+                "message": "交付信息已成功存储",
+                "order_record": order_record
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ [UserAgent] 存储交付信息失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return {
+                "success": False,
+                "error": f"存储交付信息失败: {str(e)}"
+            }
+    
+    def _get_user_wallet_address(self, user_input: Optional[str] = None) -> Optional[str]:
+        """
+        获取用户钱包地址
+        
+        优先级：
+        1. 从用户输入中提取（如果提供）
+        2. 从环境变量或配置中获取
+        3. 返回 None（如果都未提供）
+        
+        Args:
+            user_input: 用户输入文本（可选，用于提取钱包地址）
+            
+        Returns:
+            用户钱包地址字符串，如果未找到返回 None
+        """
+        # 1. 尝试从用户输入中提取钱包地址
+        if user_input:
+            import re
+            # 匹配以太坊/IoTeX钱包地址格式（0x开头，42个字符）
+            wallet_patterns = [
+                r'0x[a-fA-F0-9]{40}',  # 以太坊/IoTeX地址格式
+                r'钱包地址[:\s]*([0-9a-zA-Z]{30,50})',  # 中文格式
+                r'wallet[_\s]*address[:\s]*([0-9a-zA-Z]{30,50})',  # 英文格式
+                r'地址[:\s]*([0-9a-zA-Z]{30,50})'  # 简化格式
+            ]
+            
+            for pattern in wallet_patterns:
+                match = re.search(pattern, user_input, re.IGNORECASE)
+                if match:
+                    wallet_address = match.group(1) if match.groups() else match.group(0)
+                    # 确保地址格式正确（如果是0x开头，确保是42个字符）
+                    if wallet_address.startswith('0x') and len(wallet_address) == 42:
+                        logger.info(f"✅ [UserAgent] 从用户输入中提取钱包地址: {wallet_address[:10]}...")
+                        return wallet_address
+                    elif not wallet_address.startswith('0x') and len(wallet_address) >= 30:
+                        # 如果不是0x开头，尝试添加0x前缀
+                        if len(wallet_address) == 40:
+                            wallet_address = "0x" + wallet_address
+                            logger.info(f"✅ [UserAgent] 从用户输入中提取钱包地址（已添加0x前缀）: {wallet_address[:10]}...")
+                            return wallet_address
+        
+        # 2. 从配置中获取
+        if hasattr(self, 'user_wallet_address') and self.user_wallet_address:
+            logger.info(f"✅ [UserAgent] 使用配置中的钱包地址: {self.user_wallet_address[:10]}...")
+            return self.user_wallet_address
+        
+        # 3. 未找到
+        logger.warning("⚠️ [UserAgent] 未找到用户钱包地址")
+        return None
+    
+    def _handle_delivery_notification(self, text: str) -> Dict[str, Any]:
+        """
+        处理交付通知的完整流程
+        
+        Args:
+            text: 包含交付通知的消息文本
+            
+        Returns:
+            包含处理结果的字典
+        """
+        logger.info("📦 [UserAgent] 开始处理交付通知")
+        
+        # 1. 解析交付通知
+        delivery_notification = self._parse_delivery_notification(text)
+        if not delivery_notification:
+            return {
+                "success": False,
+                "error": "无法解析交付通知"
+            }
+        
+        order_id = delivery_notification.get("order_id", "UNKNOWN")
+        logger.info(f"📦 [UserAgent] 处理订单交付通知: {order_id}")
+        
+        # 2. 存储交付信息
+        store_result = self._store_delivery_info(delivery_notification)
+        if not store_result.get("success"):
+            return {
+                "success": False,
+                "error": store_result.get("error", "存储失败"),
+                "order_id": order_id
+            }
+        
+        # 3. 构建确认响应
+        delivery_proof = delivery_notification.get("delivery_proof", {})
+        proof_hash = delivery_proof.get("proof_hash", "N/A")
+        order_summary = delivery_notification.get("order_summary", {})
+        
+        confirmation_response = {
+            "success": True,
+            "status": "received",
+            "order_id": order_id,
+            "message": "交付通知已成功接收并存储",
+            "delivery_confirmed_at": datetime.now().isoformat(),
+            "delivery_proof_hash": proof_hash[:16] + "..." if len(proof_hash) > 16 else proof_hash,
+            "order_summary": order_summary
+        }
+        
+        logger.info(f"✅ [UserAgent] 交付通知处理完成: {order_id}")
+        
+        return confirmation_response
 
     def extract_user_input_from_workflow_context(self, text: str) -> str:
         """从工作流上下文中提取纯净的用户输入"""
@@ -792,24 +1239,56 @@ class AmazonA2AServer(A2AServer, AmazonServiceManager):
             task.status = TaskStatus(state=TaskState.FAILED)
         else:
             try:
-                # 使用nest_asyncio允许在已有事件循环中运行新的事件循环
-                import nest_asyncio
-                nest_asyncio.apply()
+                # 检查是否是交付通知
+                if self._is_delivery_notification(text):
+                    print("📦 [AmazonA2AServer] 检测到交付通知，处理交付通知...")
+                    result = self._handle_delivery_notification(text)
+                    
+                    # 构建响应文本
+                    if result.get("success"):
+                        order_id = result.get("order_id", "UNKNOWN")
+                        confirmation_json = json.dumps(result, ensure_ascii=False, indent=2)
+                        response_text = f"""✅ 交付通知已成功接收
 
-                # 使用asyncio.run运行异步函数，它会创建新的事件循环
-                import asyncio
+**订单信息:**
+- 订单ID: {order_id}
+- 接收时间: {result.get('delivery_confirmed_at', datetime.now().isoformat())}
+- 交付凭证哈希: {result.get('delivery_proof_hash', 'N/A')}
 
-                # 首先分类用户意图
-                intent_type = asyncio.run(self.classify_user_intent(text))
-                print(f"🧠 [AmazonA2AServer] Intent classified as: {intent_type}")
+**确认响应:**
+```json
+{confirmation_json}
+```
 
-                # 根据意图类型选择处理方式
-                if intent_type == "purchase_confirmation":
-                    print("🛒 [AmazonA2AServer] Processing purchase confirmation...")
-                    result = asyncio.run(self.handle_purchase_confirmation_with_agent_discovery(text))
+订单交付信息已成功存储，感谢您的确认！"""
+                    else:
+                        error_msg = result.get("error", "未知错误")
+                        response_text = f"""❌ 交付通知处理失败
+
+错误信息: {error_msg}
+
+请检查交付通知格式是否正确。"""
+                    
+                    task.status = TaskStatus(state=TaskState.COMPLETED)
                 else:
-                    print("🔍 [AmazonA2AServer] Processing product search and recommendation...")
-                    result = asyncio.run(self.autonomous_purchase(text))
+                    # 使用nest_asyncio允许在已有事件循环中运行新的事件循环
+                    import nest_asyncio
+                    nest_asyncio.apply()
+
+                    # 使用asyncio.run运行异步函数，它会创建新的事件循环
+                    import asyncio
+
+                    # 首先分类用户意图
+                    intent_type = asyncio.run(self.classify_user_intent(text))
+                    print(f"🧠 [AmazonA2AServer] Intent classified as: {intent_type}")
+
+                    # 根据意图类型选择处理方式
+                    if intent_type == "purchase_confirmation":
+                        print("🛒 [AmazonA2AServer] Processing purchase confirmation...")
+                        result = asyncio.run(self.handle_purchase_confirmation_with_agent_discovery(text))
+                    else:
+                        print("🔍 [AmazonA2AServer] Processing product search and recommendation...")
+                        result = asyncio.run(self.autonomous_purchase(text))
                 
                 # 安全地处理result，确保不是None
                 if result is None:

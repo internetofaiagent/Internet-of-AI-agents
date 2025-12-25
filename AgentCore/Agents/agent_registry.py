@@ -84,6 +84,16 @@ class AgentRegistry:
                     {"name": "create_payment", "description": "Create an Alipay payment order for a product."},
                     {"name": "amazon_coordination", "description": "Coordinate with Amazon Agent after payment completion."}
                 ]
+            },
+            {
+                "name": "Merchant A2A Agent",
+                "description": "An A2A agent that handles order receiving, delivery processing, and order management for merchants.",
+                "url": "http://localhost:5020",
+                "skills": [
+                    {"name": "receive_order", "description": "Receive and accept new orders from user agents. Validates order information and automatically accepts valid orders."},
+                    {"name": "order_delivery", "description": "Process order delivery. Update order status to delivered and manage delivery information."},
+                    {"name": "order_management", "description": "Query order status, list all orders, and manage order information."}
+                ]
             }
         ]
         

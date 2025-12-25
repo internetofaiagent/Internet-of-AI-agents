@@ -60,6 +60,16 @@ class IntentClassifier:
                 r".*amazon.*",
                 r".*亚马逊.*"
             ]
+        },
+        "merchant": {
+            "keywords": ["商家", "merchant", "接单", "交付", "deliver", "订单管理"],
+            "patterns": [
+                r".*商家.*",
+                r".*merchant.*",
+                r".*接单.*",
+                r".*交付.*",
+                r".*deliver.*"
+            ]
         }
     }
     
@@ -106,6 +116,11 @@ class AgentMatcher:
             "primary_skills": ["amazon", "shopping", "product"],
             "secondary_skills": ["search", "purchase"],
             "agent_preferences": ["amazon"]
+        },
+        "merchant": {
+            "primary_skills": ["receive_order", "order_delivery", "order_management", "merchant"],
+            "secondary_skills": ["delivery", "order", "shipment"],
+            "agent_preferences": ["merchant"]
         }
     }
     
@@ -263,24 +278,34 @@ class AgentDiscoveryService:
             workflow = {
                 "user_agent": None,
                 "payment_agent": None,
+                "merchant_agent": None,
                 "amazon_agent": None
             }
             
             # 查找各类型的agent
             for agent in agents:
                 agent_name = agent["name"].lower()
+                agent_desc = agent.get("description", "").lower()
                 
                 if "coordinator" in agent_name or "user" in agent_name:
                     workflow["user_agent"] = agent
                 elif "alipay" in agent_name or "payment" in agent_name:
                     workflow["payment_agent"] = agent
+                elif "merchant" in agent_name or "merchant" in agent_desc:
+                    workflow["merchant_agent"] = agent
                 elif "amazon" in agent_name and "shopping" in agent_name:
                     workflow["amazon_agent"] = agent
+            
+            # 确定执行顺序：如果有商家agent，使用新的流程；否则使用旧的Amazon流程
+            if workflow["merchant_agent"]:
+                execution_order = ["user_agent", "payment_agent", "merchant_agent"]
+            else:
+                execution_order = ["user_agent", "payment_agent", "amazon_agent"]
             
             return {
                 "success": True,
                 "workflow": workflow,
-                "execution_order": ["user_agent", "payment_agent", "amazon_agent"],
+                "execution_order": execution_order,
                 "all_agents": agents
             }
             
@@ -316,7 +341,13 @@ class AgentDiscoveryService:
         recommendation = f"推荐使用 '{best_agent['name']}' (匹配度: {best_agent['match_score']:.2f})"
         
         if "purchase" in intents:
-            recommendation += "\n建议的购买流程: User Agent → Payment Agent → Amazon Agent"
+            # 检查是否有商家agent
+            has_merchant = any("merchant" in agent.get("name", "").lower() or "merchant" in agent.get("description", "").lower() 
+                              for agent in agents)
+            if has_merchant:
+                recommendation += "\n建议的购买流程: User Agent → Payment Agent → Merchant Agent"
+            else:
+                recommendation += "\n建议的购买流程: User Agent → Payment Agent → Amazon Agent"
         
         return recommendation
 
