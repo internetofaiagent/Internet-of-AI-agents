@@ -1,0 +1,375 @@
+.homepage-container {
+  min-height: 100vh;
+  background-color: #ffffff;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 40px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.nav {
+  display: flex;
+  gap: 32px;
+  align-items: center;
+}
+
+.nav-link {
+  font-size: 16px;
+  color: #666666;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  transition: all 0.2s;
+}
+
+.nav-link:hover {
+  color: #0066ff;
+}
+
+.nav-link.active {
+  background-color: #e6f2ff;
+  color: #0066ff;
+  font-weight: 500;
+}
+
+.user-profile {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.user-profile:hover {
+  opacity: 0.7;
+}
+
+/* Main Content */
+.main-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+/* AI Agent Section */
+.ai-agent-section {
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+.ai-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #0066ff;
+  margin: 0 0 12px 0;
+}
+
+.ai-subtitle {
+  font-size: 32px;
+  font-weight: 700;
+  color: #0066ff;
+  margin: 0 0 32px 0;
+}
+
+.ai-input-container {
+  display: flex;
+  align-items: center;
+  background-color: #f5f5f5;
+  border-radius: 50px;
+  padding: 12px 20px;
+  max-width: 800px;
+  margin: 0 auto;
+  gap: 12px;
+}
+
+.ai-input-icons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.icon-mic {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.icon-mic:hover {
+  opacity: 0.7;
+}
+
+.ai-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  color: #000000;
+  outline: none;
+  text-align: center;
+}
+
+.ai-input::placeholder {
+  color: #999999;
+}
+
+.btn-start {
+  padding: 10px 24px;
+  background-color: #e8e8e8;
+  color: #333333;
+  border: none;
+  border-radius: 24px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  flex-shrink: 0;
+}
+
+.btn-start:hover {
+  background-color: #dbdbdb;
+}
+
+.btn-start:active {
+  background-color: #cecece;
+}
+
+/* Recommendation Section */
+.recommendation-section {
+  margin-bottom: 60px;
+}
+
+.section-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #0066ff;
+  margin: 0 0 24px 0;
+}
+
+.recommendation-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.recommendation-card {
+  background-color: #ffffff;
+  border: 1px solid #e8e8e8;
+  border-radius: 12px;
+  padding: 24px;
+  transition: box-shadow 0.2s;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.recommendation-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.avatar-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #e6f2ff;
+  overflow: hidden;
+}
+
+.avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #0066ff;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.card-content {
+  flex: 1;
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #000000;
+  margin: 0 0 8px 0;
+}
+
+.card-description {
+  font-size: 14px;
+  color: #666666;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Bottom Sections */
+.bottom-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+}
+
+.previous-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.task-list,
+.agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.task-item,
+.agent-item {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 16px;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+  cursor: pointer;
+}
+
+.task-item:hover,
+.agent-item:hover {
+  background-color: #f9f9f9;
+}
+
+.task-icon,
+.agent-avatar {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gift-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gift-patch {
+  background-color: #ff0000;
+  color: #ffffff;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 4px 6px;
+  border-radius: 4px;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.agent-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: #e6f2ff;
+  overflow: hidden;
+}
+
+.airline-logo {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #4caf50;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.airline-s {
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.airline-text {
+  color: #ffffff;
+  font-size: 8px;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.task-content,
+.agent-content {
+  flex: 1;
+}
+
+.task-title,
+.agent-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #000000;
+  margin: 0 0 6px 0;
+}
+
+.task-details,
+.agent-details {
+  font-size: 14px;
+  color: #666666;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Responsive */
+@media (max-width: 968px) {
+  .recommendation-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .bottom-sections {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .header {
+    padding: 16px 20px;
+  }
+
+  .nav {
+    gap: 16px;
+  }
+
+  .nav-link {
+    font-size: 14px;
+    padding: 6px 12px;
+  }
+
+  .ai-input-container {
+    flex-wrap: wrap;
+  }
+
+  .btn-start {
+    width: 100%;
+  }
+}
+

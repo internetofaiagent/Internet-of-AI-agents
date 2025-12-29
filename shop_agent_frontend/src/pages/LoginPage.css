@@ -1,0 +1,130 @@
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #ffffff;
+  padding: 20px;
+}
+
+.logo-container {
+  margin-bottom: 40px;
+  display: flex;
+  justify-content: center;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-card {
+  background-color: #f5f5f5;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 40px;
+  max-width: 450px;
+  width: 100%;
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 600;
+  text-align: center;
+  margin: 0 0 16px 0;
+  color: #000000;
+  line-height: 1.3;
+}
+
+.description {
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  color: #000000;
+  margin: 0 0 28px 0;
+  line-height: 1.4;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  background-color: #fafafa;
+  border-radius: 8px;
+  padding: 4px 0;
+  transition: background-color 0.2s;
+}
+
+.input-group:focus-within {
+  background-color: #ffffff;
+}
+
+.input-field {
+  padding: 14px 16px;
+  border: none;
+  border-bottom: 2px solid #e0e0e0;
+  border-radius: 8px;
+  background-color: transparent;
+  font-size: 16px;
+  color: #000000;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.input-field:focus {
+  border-bottom-color: #0066ff;
+}
+
+.input-field::placeholder {
+  color: #666666;
+  font-weight: 500;
+}
+
+.btn-login {
+  padding: 16px 24px;
+  background-color: #0066ff;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 102, 255, 0.2);
+}
+
+.btn-login:hover {
+  background-color: #0052cc;
+}
+
+.btn-login:active {
+  background-color: #003d99;
+}
+
+.btn-signup {
+  padding: 16px 24px;
+  background-color: #fafafa;
+  color: #000000;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-signup:hover {
+  background-color: #e8e8e8;
+}
+
+.btn-signup:active {
+  background-color: #dbdbdb;
+}
+
