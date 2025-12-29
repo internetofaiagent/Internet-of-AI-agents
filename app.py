@@ -22,6 +22,10 @@ from enum import Enum
 import asyncio
 import nest_asyncio
 from AgentCore.Agents.user_agent_a2a import AmazonServiceManager
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
 
 # 设置nest_asyncio以支持嵌套事件循环
 nest_asyncio.apply()
@@ -85,7 +89,7 @@ class AgentServerManager:
             
             # 确保必要的环境变量存在
             if not env.get('MODELSCOPE_SDK_TOKEN'):
-                env['MODELSCOPE_SDK_TOKEN'] = '9d3aed4d-eca1-4e0c-9805-cb923ccbbf21'
+                env['MODELSCOPE_SDK_TOKEN'] = 'ms-8fa443fb-2162-45da-b88d-d7d3582e4ad8'
                 print("为 " + agent_name + " 设置MODELSCOPE_SDK_TOKEN")
             
             if not env.get('FEWSATS_API_KEY'):
@@ -1450,7 +1454,7 @@ def get_order_blockchain(order_id: str):
     print("   • Agent间协作通信")
     print("   • 多用户多会话支持")
     print()
-    print(" 访问地址: http://localhost:5000")
+    print(" 访问地址: http://localhost:8000")
     print(" 主要API:")
     print("   • POST /api/chat - 聊天接口（纯A2A模式）")
     print("   • GET /api/health - A2A服务健康检查")
@@ -1459,7 +1463,7 @@ def get_order_blockchain(order_id: str):
     print("   • POST /api/agents/stop - 停止Agent服务器")
     print()
     print(" 使用示例:")
-    print("   curl -X POST http://localhost:5000/api/chat \\")
+    print("   curl -X POST http://localhost:8000/api/chat \\")
     print("        -H 'Content-Type: application/json' \\")
     print("        -d '{\"message\":\"我想买iPhone 15\",\"user_id\":\"user123\"}'")
     print()
@@ -1481,7 +1485,7 @@ if __name__ == '__main__':
         logger.info(" 启动Flask Web服务器...")
         app.run(
             host='0.0.0.0',
-            port=5000,
+            port=8000,
             debug=False,
             threaded=True  # 启用多线程支持异步调用和A2A通信
         )

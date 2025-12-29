@@ -22,7 +22,7 @@ class AlipayOrderService:
         """初始化支付宝订单服务"""
         # 设置环境变量（如果未设置）
         if not os.environ.get('MODELSCOPE_SDK_TOKEN'):
-            os.environ['MODELSCOPE_SDK_TOKEN'] = '877a7051-f22f-4230-87e8-e0effb36a399'
+            os.environ['MODELSCOPE_SDK_TOKEN'] = 'ms-8fa443fb-2162-45da-b88d-d7d3582e4ad8'
             print("🔧 设置MODELSCOPE_SDK_TOKEN环境变量")
 
         self.model = model or ModelFactory.create(

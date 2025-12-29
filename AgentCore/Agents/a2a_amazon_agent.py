@@ -20,7 +20,7 @@ from python_a2a import A2AServer, run_server, AgentCard, AgentSkill, TaskStatus,
 
 # 设置环境变量 - 确保在最早时机设置
 if not os.environ.get('MODELSCOPE_SDK_TOKEN'):
-    os.environ['MODELSCOPE_SDK_TOKEN'] = '877a7051-f22f-4230-87e8-e0effb36a399'
+    os.environ['MODELSCOPE_SDK_TOKEN'] = 'ms-8fa443fb-2162-45da-b88d-d7d3582e4ad8'
     print("🔧 设置MODELSCOPE_SDK_TOKEN环境变量")
 
 if not os.environ.get('FEWSATS_API_KEY'):
@@ -453,8 +453,8 @@ class AmazonShoppingServiceManager:
             # 再次确保环境变量设置
             modelscope_token = os.environ.get('MODELSCOPE_SDK_TOKEN')
             if not modelscope_token:
-                os.environ['MODELSCOPE_SDK_TOKEN'] = '877a7051-f22f-4230-87e8-e0effb36a399'
-                modelscope_token = '877a7051-f22f-4230-87e8-e0effb36a399'
+                os.environ['MODELSCOPE_SDK_TOKEN'] = 'ms-8fa443fb-2162-45da-b88d-d7d3582e4ad8'
+                modelscope_token = 'ms-8fa443fb-2162-45da-b88d-d7d3582e4ad8'
                 print("🔧 重新设置MODELSCOPE_SDK_TOKEN")
             
             fewsats_key = os.environ.get('FEWSATS_API_KEY')
