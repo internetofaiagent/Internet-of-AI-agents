@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "wechat-pay": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@wechat/mcp-server-wechat-pay",
+        "--tools=all"
+      ],
+      "env": {
+        "WECHAT_APP_ID": "YOUR_WECHAT_APP_ID",
+        "WECHAT_MCH_ID": "YOUR_MERCHANT_ID",
+        "WECHAT_API_KEY": "YOUR_WECHAT_API_KEY",
+        "WECHAT_APP_SECRET": "YOUR_WECHAT_APP_SECRET",
+        "WECHAT_CERT_PATH": "./certs/apiclient_cert.pem",
+        "WECHAT_KEY_PATH": "./certs/apiclient_key.pem",
+        "WECHAT_NOTIFY_URL": "http://localhost:5006/wechat-pay/notify",
+        "WECHAT_ENVIRONMENT": "sandbox"
+      },
+      "disabled": false,
+      "autoApprove": [],
+      "clientRequestTimeout": 60000
+    }
+  }
+}
+

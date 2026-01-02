@@ -25,8 +25,18 @@ class PaymentConfig:
     alipay_gateway: str = "https://openapi.alipay.com/gateway.do"
     alipay_sandbox: bool = True
     
-    # 其他支付方式配置
+    # 微信支付配置
     wechat_pay_enabled: bool = False
+    wechat_app_id: str = ""
+    wechat_mch_id: str = ""
+    wechat_api_key: str = ""
+    wechat_app_secret: str = ""
+    wechat_cert_path: str = ""
+    wechat_key_path: str = ""
+    wechat_notify_url: str = ""
+    wechat_sandbox: bool = True
+    
+    # 其他支付方式配置
     stripe_enabled: bool = False
 
 @dataclass
@@ -65,7 +75,8 @@ class SystemConfig:
     
     # 服务端口配置
     user_agent_port: int = 5011
-    payment_agent_port: int = 5005
+    payment_agent_port: int = 5005  # Alipay Agent 端口
+    wechat_pay_agent_port: int = 5006  # WeChat Pay Agent 端口
     amazon_agent_port: int = 5012
     registry_port: int = 5001
 
@@ -85,7 +96,16 @@ class ConfigManager:
             alipay_private_key_path=os.getenv('ALIPAY_PRIVATE_KEY_PATH', ''),
             alipay_public_key_path=os.getenv('ALIPAY_PUBLIC_KEY_PATH', ''),
             alipay_gateway=os.getenv('ALIPAY_GATEWAY', 'https://openapi.alipay.com/gateway.do'),
-            alipay_sandbox=os.getenv('ALIPAY_SANDBOX', 'true').lower() == 'true'
+            alipay_sandbox=os.getenv('ALIPAY_SANDBOX', 'true').lower() == 'true',
+            wechat_pay_enabled=os.getenv('WECHAT_PAY_ENABLED', 'false').lower() == 'true',
+            wechat_app_id=os.getenv('WECHAT_APP_ID', ''),
+            wechat_mch_id=os.getenv('WECHAT_MCH_ID', ''),
+            wechat_api_key=os.getenv('WECHAT_API_KEY', ''),
+            wechat_app_secret=os.getenv('WECHAT_APP_SECRET', ''),
+            wechat_cert_path=os.getenv('WECHAT_CERT_PATH', ''),
+            wechat_key_path=os.getenv('WECHAT_KEY_PATH', ''),
+            wechat_notify_url=os.getenv('WECHAT_NOTIFY_URL', ''),
+            wechat_sandbox=os.getenv('WECHAT_SANDBOX', 'true').lower() == 'true'
         )
         
         self.amazon_config = AmazonConfig(
@@ -110,6 +130,7 @@ class ConfigManager:
             enable_tracing=os.getenv('ENABLE_TRACING', 'false').lower() == 'true',
             user_agent_port=int(os.getenv('USER_AGENT_PORT', '5011')),
             payment_agent_port=int(os.getenv('PAYMENT_AGENT_PORT', '5005')),
+            wechat_pay_agent_port=int(os.getenv('WECHAT_PAY_AGENT_PORT', '5006')),
             amazon_agent_port=int(os.getenv('AMAZON_AGENT_PORT', '5012')),
             registry_port=int(os.getenv('REGISTRY_PORT', '5001'))
         )
@@ -139,6 +160,20 @@ class ConfigManager:
             if not os.path.exists(self.payment_config.alipay_private_key_path):
                 issues.append("支付宝私钥文件不存在")
         
+        # 验证微信支付配置（如果启用）
+        if self.payment_config.wechat_pay_enabled:
+            if self.is_payment_real():
+                if not self.payment_config.wechat_app_id:
+                    issues.append("微信支付APP_ID未配置")
+                if not self.payment_config.wechat_mch_id:
+                    issues.append("微信支付商户号(MCH_ID)未配置")
+                if not self.payment_config.wechat_api_key:
+                    issues.append("微信支付API_KEY未配置")
+                if self.payment_config.wechat_cert_path and not os.path.exists(self.payment_config.wechat_cert_path):
+                    issues.append("微信支付证书文件不存在")
+                if self.payment_config.wechat_key_path and not os.path.exists(self.payment_config.wechat_key_path):
+                    issues.append("微信支付私钥文件不存在")
+        
         # 验证Amazon配置
         if self.is_amazon_real():
             if not self.amazon_config.sp_api_refresh_token:
@@ -152,6 +187,8 @@ class ConfigManager:
         if self.is_production():
             if self.payment_config.alipay_sandbox:
                 issues.append("生产环境不应使用支付宝沙箱")
+            if self.payment_config.wechat_pay_enabled and self.payment_config.wechat_sandbox:
+                issues.append("生产环境不应使用微信支付沙箱")
             if self.amazon_config.sandbox:
                 issues.append("生产环境不应使用Amazon沙箱")
         
@@ -162,12 +199,16 @@ class ConfigManager:
     
     def get_service_urls(self) -> Dict[str, str]:
         """获取服务URL配置"""
-        return {
+        urls = {
             "user_agent": f"http://localhost:{self.system_config.user_agent_port}",
             "payment_agent": f"http://localhost:{self.system_config.payment_agent_port}",
             "amazon_agent": f"http://localhost:{self.system_config.amazon_agent_port}",
             "registry": f"http://localhost:{self.system_config.registry_port}"
         }
+        # 如果微信支付启用，添加微信支付Agent URL
+        if self.payment_config.wechat_pay_enabled:
+            urls["wechat_pay_agent"] = f"http://localhost:{self.system_config.wechat_pay_agent_port}"
+        return urls
     
     def export_config_template(self, file_path: str = ".env.template"):
         """导出配置模板"""
@@ -179,17 +220,31 @@ ENABLE_TRACING=false
 
 # 服务端口配置
 USER_AGENT_PORT=5011
-PAYMENT_AGENT_PORT=5005
+PAYMENT_AGENT_PORT=5005  # Alipay Agent 端口
+WECHAT_PAY_AGENT_PORT=5006  # WeChat Pay Agent 端口
 AMAZON_AGENT_PORT=5012
 REGISTRY_PORT=5001
 
 # 支付配置
 PAYMENT_MODE=mock  # mock, real, hybrid
+
+# 支付宝配置
 ALIPAY_APP_ID=your_app_id_here
 ALIPAY_PRIVATE_KEY_PATH=./keys/app_private_key.pem
 ALIPAY_PUBLIC_KEY_PATH=./keys/alipay_public_key.pem
 ALIPAY_GATEWAY=https://openapi.alipay.com/gateway.do
 ALIPAY_SANDBOX=true
+
+# 微信支付配置
+WECHAT_PAY_ENABLED=false  # 是否启用微信支付
+WECHAT_APP_ID=your_wechat_app_id
+WECHAT_MCH_ID=your_merchant_id
+WECHAT_API_KEY=your_wechat_api_key
+WECHAT_APP_SECRET=your_wechat_app_secret  # 可选
+WECHAT_CERT_PATH=./certs/apiclient_cert.pem  # 可选
+WECHAT_KEY_PATH=./certs/apiclient_key.pem  # 可选
+WECHAT_NOTIFY_URL=http://localhost:5006/wechat-pay/notify
+WECHAT_SANDBOX=true
 
 # Amazon配置
 AMAZON_MODE=mock  # mock, real, hybrid
