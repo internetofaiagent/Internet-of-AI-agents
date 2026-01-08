@@ -29,6 +29,24 @@ except ImportError as e:
     print(f"⚠️ Agent发现服务导入失败: {e}")
     AGENT_DISCOVERY_AVAILABLE = False
 
+# --- 支付方式和服务工厂导入 ---
+try:
+    from .payment_methods import PaymentMethod, PaymentServiceFactory
+    PAYMENT_SERVICE_FACTORY_AVAILABLE = True
+    logger.info("✅ 支付服务工厂导入成功")
+except ImportError as e:
+    PAYMENT_SERVICE_FACTORY_AVAILABLE = False
+    logger.warning(f"⚠️ 支付服务工厂导入失败: {e}")
+
+# --- 支付转换服务导入 ---
+try:
+    from .payment_converter import PaymentConverter
+    PAYMENT_CONVERTER_AVAILABLE = True
+    logger.info("✅ 支付转换服务导入成功")
+except ImportError as e:
+    PAYMENT_CONVERTER_AVAILABLE = False
+    logger.warning(f"⚠️ 支付转换服务导入失败: {e}")
+
 # --- 日志配置 ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("AmazonA2AAgent")
@@ -109,6 +127,22 @@ class AmazonServiceManager:
             logger.info(f"✅ [AmazonServiceManager] 用户钱包地址已从环境变量加载: {self.user_wallet_address[:10]}...")
         else:
             logger.info("ℹ️ [AmazonServiceManager] 用户钱包地址未配置，将从用户输入中获取")
+        
+        # 用户接受的仲裁Agent配置（从环境变量读取）
+        # 格式：USER_ACCEPTED_ARBITRATION_AGENTS=http://localhost:5025,http://localhost:5026
+        accepted_arbitration_agents_env = os.getenv("USER_ACCEPTED_ARBITRATION_AGENTS", "").strip()
+        if accepted_arbitration_agents_env:
+            # 从环境变量解析仲裁Agent URL列表
+            self.accepted_arbitration_agents = [
+                url.strip() 
+                for url in accepted_arbitration_agents_env.split(",") 
+                if url.strip()
+            ]
+            logger.info(f"✅ [AmazonServiceManager] 从环境变量读取接受的仲裁Agent: {self.accepted_arbitration_agents}")
+        else:
+            # 默认使用空列表（表示不限制，或使用系统默认）
+            self.accepted_arbitration_agents = []
+            logger.info("ℹ️ [AmazonServiceManager] 用户接受的仲裁Agent未配置，将使用默认值（空列表）")
 
     async def _get_session(self):
         """获取或创建aiohttp会话，确保在当前事件循环中创建"""
@@ -808,20 +842,47 @@ class AmazonServiceManager:
                 "confirmation_message": extracted_info.get("confirmation_message", "")
             }
             
-            # 动态发现agents并调用Payment Agent创建订单
-            logger.info("📞 User confirmed purchase, discovering agents and calling Payment Agent...")
-            agent_urls = self.discover_agents_for_purchase(user_input)
-
-            if agent_urls["discovery_used"]:
-                print("✅ 使用Agent发现服务找到合适的agents")
-            else:
-                print("⚠️ 使用默认的硬编码agent URLs")
-
+            # 提取用户选择的支付方式
+            selected_payment_method = PaymentMethod.ALIPAY  # 默认使用 Alipay
+            
             try:
-                payment_agent_url = agent_urls["payment_agent_url"]
-                print(f"🔗 连接到Payment Agent: {payment_agent_url}")
-
-                payment_request_text = f"""用户确认购买商品，请创建支付订单：
+                # 尝试从用户输入中提取支付方式偏好
+                user_intent = await self.understand_intent(user_input)
+                preferred_payment_methods = user_intent.get("preferred_payment_methods", [])
+                
+                if preferred_payment_methods and len(preferred_payment_methods) > 0:
+                    # 选择第一个可用的支付方式
+                    first_preference = preferred_payment_methods[0].lower().strip()
+                    payment_method = PaymentMethod.from_string(first_preference)
+                    if payment_method and payment_method in [PaymentMethod.ALIPAY, PaymentMethod.WECHAT_PAY]:
+                        selected_payment_method = payment_method
+                        logger.info(f"✅ [UserAgent] 使用用户选择的支付方式: {selected_payment_method.value}")
+            else:
+                        logger.warning(f"⚠️ [UserAgent] 不支持的支付方式: {first_preference}，使用默认 Alipay")
+                else:
+                    logger.info("ℹ️ [UserAgent] 用户未指定支付方式，使用默认 Alipay")
+            except Exception as e:
+                logger.warning(f"⚠️ [UserAgent] 提取支付方式偏好失败: {e}，使用默认 Alipay")
+            
+            # 动态发现agents（用于获取商家 Agent URL，提前获取避免重复调用）
+            agent_urls = self.discover_agents_for_purchase(user_input)
+            
+            # 使用 PaymentServiceFactory 创建支付订单
+            logger.info(f"📞 [UserAgent] 使用 {selected_payment_method.value} 创建支付订单...")
+            
+            try:
+                # 准备产品信息
+                product_info_dict = {
+                    "name": solution['title'],
+                    "usd_price": solution['total_amount'],
+                    "quantity": solution['quantity'],
+                    "asin": solution.get('asin', ''),
+                    "url": solution.get('product_url', '')
+                }
+                
+                # 使用 PaymentServiceFactory 创建支付订单
+                if PAYMENT_SERVICE_FACTORY_AVAILABLE:
+                    payment_request_query = f"""用户确认购买商品，请创建支付订单：
 
 商品信息：
 - 名称: {solution['title']}
@@ -830,19 +891,111 @@ class AmazonServiceManager:
 - 单价: ${solution['unit_price']:.2f} USD
 - 总价: ${solution['total_amount']:.2f} USD
 
-请为此商品创建支付订单并通知Amazon Agent。"""
-
+请为此商品创建支付订单。"""
+                    
+                    payment_result = await PaymentServiceFactory.create_payment(
+                        payment_method=selected_payment_method,
+                        query=payment_request_query,
+                        product_info=product_info_dict
+                    )
+                    
+                    if payment_result.get("success"):
+                        payment_response = payment_result.get("response_content", str(payment_result))
+                        payment_order_id = payment_result.get("order_number")
+                        logger.info(f"✅ [UserAgent] 支付订单创建成功: {payment_order_id}")
+                    else:
+                        error_msg = payment_result.get("error", "未知错误")
+                        raise Exception(f"支付订单创建失败: {error_msg}")
+                else:
+                    # 回退到旧的 A2A 调用方式
+                    logger.warning("⚠️ [UserAgent] PaymentServiceFactory 不可用，使用旧的 A2A 调用方式")
+                    payment_agent_url = agent_urls["payment_agent_url"]
                 payment_client = A2AClient(payment_agent_url)
+                    payment_request_text = f"""用户确认购买商品，请创建支付订单：
+
+商品信息：
+- 名称: {solution['title']}
+- ASIN: {solution['asin']}
+- 数量: {solution['quantity']}
+- 单价: ${solution['unit_price']:.2f} USD
+- 总价: ${solution['total_amount']:.2f} USD
+
+请为此商品创建支付订单。"""
                 payment_response = payment_client.ask(payment_request_text)
+                    payment_order_id = None
+                    
+                    # 尝试从响应中提取订单号
+                    if "订单号" in payment_response or "order" in payment_response.lower():
+                        order_match = re.search(r'订单[号码]*[:\s]*([A-Za-z0-9_-]+)', payment_response, re.IGNORECASE)
+                        if not order_match:
+                            order_match = re.search(r'order[_\s]*id[:\s]*([A-Za-z0-9_-]+)', payment_response, re.IGNORECASE)
+                        if order_match:
+                            payment_order_id = order_match.group(1)
                 
-                logger.info("✅ Successfully received payment info from Payment Agent")
+                logger.info("✅ [UserAgent] 支付订单创建完成")
+                
+                # 支付完成后，检查是否需要转换
+                conversion_result = None
+                final_payment_method = selected_payment_method  # 最终使用的支付方式（可能是转换后的）
+                
+                if PAYMENT_CONVERTER_AVAILABLE and payment_order_id:
+                    try:
+                        # 获取商家收款方式（从环境变量或使用默认值）
+                        merchant_payment_str = os.getenv("MERCHANT_PAYMENT_METHOD", "alipay").strip().lower()
+                        merchant_payment_method = PaymentMethod.from_string(merchant_payment_str)
+                        if not merchant_payment_method:
+                            # 如果解析失败，使用默认值 Alipay
+                            merchant_payment_method = PaymentMethod.ALIPAY
+                            logger.warning(f"⚠️ [UserAgent] 无法解析商家收款方式: {merchant_payment_str}，使用默认 Alipay")
+                        
+                        logger.info(f"🔄 [UserAgent] 检查支付转换: 用户支付方式={selected_payment_method.value}, 商家收款方式={merchant_payment_method.value}")
+                        
+                        # 创建支付转换器
+                        converter = PaymentConverter()
+                        
+                        # 检查是否需要转换
+                        conversion_check = converter.check_conversion_needed(selected_payment_method, merchant_payment_method)
+                        
+                        if conversion_check["needs_conversion"]:
+                            logger.info(f"✅ [UserAgent] 需要支付转换: {conversion_check['reason']}")
+                            
+                            # 执行转换流程
+                            conversion_result = await converter.execute_conversion(
+                                user_payment=selected_payment_method,
+                                merchant_payment=merchant_payment_method,
+                                payment_order_id=payment_order_id,
+                                amount=solution['total_amount'],
+                                currency=solution['currency'],
+                                product_info=product_info_dict
+                            )
+                            
+                            if conversion_result.get("success"):
+                                # 转换成功，更新最终支付方式为商家收款方式
+                                final_payment_method = merchant_payment_method
+                                logger.info(f"✅ [UserAgent] 支付转换成功: {selected_payment_method.value} → {merchant_payment_method.value}")
+                                logger.info(f"   转换步骤数: {conversion_result.get('total_steps', 0)}")
+                                logger.info(f"   最终状态: {conversion_result.get('final_status', 'unknown')}")
+                            else:
+                                error_msg = conversion_result.get("error", "未知错误")
+                                logger.error(f"❌ [UserAgent] 支付转换失败: {error_msg}")
+                                # 转换失败，继续使用原始支付方式
+                        else:
+                            logger.info(f"ℹ️ [UserAgent] 无需支付转换: {conversion_check['reason']}")
+                    except Exception as e:
+                        logger.error(f"❌ [UserAgent] 支付转换检查失败: {e}")
+                        # 转换失败，继续使用原始支付方式
+                else:
+                    if not PAYMENT_CONVERTER_AVAILABLE:
+                        logger.warning("⚠️ [UserAgent] PaymentConverter 不可用，跳过支付转换检查")
+                    if not payment_order_id:
+                        logger.warning("⚠️ [UserAgent] 支付订单号不可用，跳过支付转换检查")
                 
                 # 支付完成后，调用商家 Agent 发送订单
                 merchant_agent_url = agent_urls.get("merchant_agent_url", "http://localhost:5020")
                 
-                # 尝试从支付响应中提取支付订单号
+                # 提取支付订单号和交易哈希（如果 PaymentServiceFactory 未返回）
+                if not payment_order_id:
                 payment_order_id = None
-                payment_transaction_hash = None
                 try:
                     # 尝试从响应中提取支付订单号（可能是JSON或文本格式）
                     if "订单号" in payment_response or "order" in payment_response.lower():
@@ -851,8 +1004,12 @@ class AmazonServiceManager:
                             order_match = re.search(r'order[_\s]*id[:\s]*([A-Za-z0-9_-]+)', payment_response, re.IGNORECASE)
                         if order_match:
                             payment_order_id = order_match.group(1)
+                    except Exception as e:
+                        logger.warning(f"⚠️ 提取支付订单号失败: {e}")
                     
                     # 尝试提取交易哈希或交易流水号
+                payment_transaction_hash = None
+                try:
                     hash_match = re.search(r'[0-9a-fA-F]{32,64}', payment_response)
                     if hash_match:
                         payment_transaction_hash = hash_match.group(0)
@@ -862,7 +1019,7 @@ class AmazonServiceManager:
                         if txn_match:
                             payment_transaction_hash = txn_match.group(1)
                 except Exception as e:
-                    logger.warning(f"⚠️ 提取支付信息失败: {e}")
+                    logger.warning(f"⚠️ 提取交易哈希失败: {e}")
                 
                 # 生成订单ID
                 order_id = f"ORDER_{int(time.time())}"
@@ -876,6 +1033,121 @@ class AmazonServiceManager:
                     logger.info(f"✅ [UserAgent] 已获取用户钱包地址: {user_wallet_address[:10]}...")
                 else:
                     logger.warning("⚠️ [UserAgent] 未获取到用户钱包地址，上链功能可能受限")
+                
+                # =====================================================================
+                # 交易前匹配验证：检查用户和商家的仲裁Agent是否有交集
+                # =====================================================================
+                logger.info("🔍 [UserAgent] 开始交易前仲裁Agent匹配验证...")
+                
+                # 获取用户的仲裁Agent列表
+                user_arbitration_agents = getattr(self, 'accepted_arbitration_agents', [])
+                logger.info(f"📋 [UserAgent] 用户接受的仲裁Agent: {user_arbitration_agents}")
+                
+                # 获取商家的仲裁Agent列表（通过A2AClient查询）
+                merchant_arbitration_agents = []
+                selected_arbitration_agent = None
+                
+                try:
+                    # 通过A2AClient查询商家的仲裁偏好
+                    merchant_client = A2AClient(merchant_agent_url)
+                    query_text = """请返回您接受的仲裁Agent列表（accepted_arbitration_agents）。
+                    
+请以JSON格式返回，格式如下：
+{
+    "accepted_arbitration_agents": ["http://localhost:5025", "http://localhost:5026"]
+}
+
+如果没有配置，请返回空列表 []。"""
+                    
+                    merchant_response = merchant_client.ask(query_text)
+                    logger.info(f"📥 [UserAgent] 收到商家Agent响应: {merchant_response[:200] if merchant_response else 'None'}...")
+                    
+                    # 尝试从响应中解析JSON
+                    try:
+                        # 尝试提取JSON部分
+                        if "{" in merchant_response and "}" in merchant_response:
+                            start = merchant_response.find("{")
+                            end = merchant_response.rfind("}") + 1
+                            json_str = merchant_response[start:end]
+                            merchant_config = json.loads(json_str)
+                            merchant_arbitration_agents = merchant_config.get("accepted_arbitration_agents", [])
+                            
+                            # 确保是列表格式
+                            if not isinstance(merchant_arbitration_agents, list):
+                                merchant_arbitration_agents = []
+                            
+                            logger.info(f"📋 [UserAgent] 商家接受的仲裁Agent: {merchant_arbitration_agents}")
+                        else:
+                            logger.warning("⚠️ [UserAgent] 商家Agent响应中未找到JSON格式，使用空列表")
+                            merchant_arbitration_agents = []
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.warning(f"⚠️ [UserAgent] 解析商家Agent响应失败: {e}，使用空列表")
+                        merchant_arbitration_agents = []
+                
+                except Exception as e:
+                    logger.error(f"❌ [UserAgent] 查询商家仲裁偏好失败: {e}")
+                    # 如果查询失败，使用空列表（表示商家未限制）
+                    merchant_arbitration_agents = []
+                
+                # 检查是否有交集
+                # 如果用户或商家任一方的列表为空，表示不限制，允许交易
+                if not user_arbitration_agents or not merchant_arbitration_agents:
+                    if not user_arbitration_agents and not merchant_arbitration_agents:
+                        logger.info("ℹ️ [UserAgent] 用户和商家都未配置仲裁Agent限制，允许交易")
+                    elif not user_arbitration_agents:
+                        logger.info("ℹ️ [UserAgent] 用户未配置仲裁Agent限制，允许交易")
+                    else:
+                        logger.info("ℹ️ [UserAgent] 商家未配置仲裁Agent限制，允许交易")
+                else:
+                    # 双方都有配置，检查交集
+                    # 标准化URL（去除末尾斜杠，转换为小写进行比较）
+                    user_agents_normalized = [url.rstrip('/').lower() for url in user_arbitration_agents]
+                    merchant_agents_normalized = [url.rstrip('/').lower() for url in merchant_arbitration_agents]
+                    
+                    # 找到交集
+                    common_agents = []
+                    for user_agent in user_arbitration_agents:
+                        user_agent_normalized = user_agent.rstrip('/').lower()
+                        if user_agent_normalized in merchant_agents_normalized:
+                            # 找到匹配的商家Agent（使用原始URL）
+                            matching_merchant_agent = next(
+                                (m for m in merchant_arbitration_agents if m.rstrip('/').lower() == user_agent_normalized),
+                                None
+                            )
+                            if matching_merchant_agent:
+                                common_agents.append(matching_merchant_agent)
+                    
+                    if common_agents:
+                        # 有交集，选择第一个共同Agent
+                        selected_arbitration_agent = common_agents[0]
+                        logger.info(f"✅ [UserAgent] 找到共同仲裁Agent: {selected_arbitration_agent}")
+                        logger.info(f"   共同Agent列表: {common_agents}")
+                    else:
+                        # 无交集，拒绝交易
+                        error_msg = f"""❌ 交易被拒绝：用户和商家没有共同的仲裁Agent
+
+**用户接受的仲裁Agent**:
+{chr(10).join(f'  • {url}' for url in user_arbitration_agents) if user_arbitration_agents else '  • 未配置'}
+
+**商家接受的仲裁Agent**:
+{chr(10).join(f'  • {url}' for url in merchant_arbitration_agents) if merchant_arbitration_agents else '  • 未配置'}
+
+**说明**:
+双方必须至少有一个共同的仲裁Agent才能进行交易。请调整您的仲裁偏好设置后重试。"""
+                        
+                        logger.error(f"❌ [UserAgent] 交易前匹配验证失败: 无共同仲裁Agent")
+                        return {
+                            "status": "error",
+                            "message": "交易被拒绝：用户和商家没有共同的仲裁Agent",
+                            "response": error_msg,
+                            "user_arbitration_agents": user_arbitration_agents,
+                            "merchant_arbitration_agents": merchant_arbitration_agents,
+                            "validation_failed": True
+                        }
+                
+                # 验证通过，记录选定的仲裁Agent到订单数据
+                if selected_arbitration_agent:
+                    logger.info(f"✅ [UserAgent] 交易前匹配验证通过，选定仲裁Agent: {selected_arbitration_agent}")
                 
                 # 构造订单数据
                 order_data = {
@@ -893,29 +1165,66 @@ class AmazonServiceManager:
                     "payment_info": {
                         "payment_order_id": payment_order_id,
                         "payment_status": "paid",
-                        "payment_method": "alipay",
+                        "payment_method": final_payment_method.value,  # 使用最终支付方式（可能是转换后的）
                         "payment_transaction_hash": payment_transaction_hash,
                         "payment_amount": solution['total_amount'],
                         "payment_currency": solution['currency'],
-                        "paid_at": datetime.now().isoformat()
+                        "paid_at": datetime.now().isoformat(),
+                        # 添加转换信息（如果进行了转换）
+                        "conversion_info": conversion_result if conversion_result else None,
+                        "original_payment_method": selected_payment_method.value  # 原始用户支付方式
                     },
                     "user_agent_url": user_agent_url,  # 传递用户 Agent URL
-                    "user_wallet_address": user_wallet_address  # 传递用户钱包地址
+                    "user_wallet_address": user_wallet_address,  # 传递用户钱包地址
+                    # 添加仲裁信息
+                    "arbitration_info": {
+                        "arbitration_agent_url": selected_arbitration_agent if selected_arbitration_agent else None,  # 选定的仲裁Agent URL
+                        "status": "none",  # none, initiated, decided
+                        "case_id": None,  # 仲裁案例ID（发起仲裁后设置）
+                        "decision": None,  # 仲裁裁定结果（decided后设置）
+                        "responsible_party": None  # "user" or "merchant"（decided后设置）
+                    } if selected_arbitration_agent or user_arbitration_agents or merchant_arbitration_agents else {
+                        "arbitration_agent_url": None,
+                        "status": "none",
+                        "case_id": None,
+                        "decision": None,
+                        "responsible_party": None
+                    }
                 }
                 
                 logger.info(f"📦 [UserAgent] 准备发送订单至商家 Agent: {order_id}")
+                
+                # 在订单数据中保存商家Agent URL
+                order_data["merchant_agent_url"] = merchant_agent_url
+                
                 merchant_result = self._call_merchant_agent_with_retry(
                     merchant_agent_url=merchant_agent_url,
                     order_data=order_data
                 )
                 
+                # 保存订单到订单存储（包含merchant_result）
+                order_data["merchant_result"] = merchant_result
+                self.user_orders[order_id] = order_data
+                
                 # 构建最终响应
                 merchant_status = "✅ 订单已发送至商家" if merchant_result.get("success") else "⚠️ 订单发送至商家失败，但支付已成功"
                 merchant_detail = merchant_result.get("message", "")
                 
+                # 构建支付信息响应（包含转换信息）
+                payment_info_text = payment_response
+                if conversion_result and conversion_result.get("success"):
+                    conversion_path = " → ".join(conversion_result.get("conversion_path", []))
+                    payment_info_text += f"\n\n**支付转换信息**:\n"
+                    payment_info_text += f"• 转换路径: {conversion_path}\n"
+                    payment_info_text += f"• 转换状态: {conversion_result.get('final_status', 'unknown')}\n"
+                    payment_info_text += f"• 转换步骤数: {conversion_result.get('total_steps', 0)}\n"
+                    if conversion_result.get("merchant_notification"):
+                        payment_info_text += f"• 商家通知: {conversion_result['merchant_notification'].get('notification_result', 'unknown')}\n"
+                
                 solution.update({
                     'payment_info': payment_response,
                     'merchant_result': merchant_result,
+                    'conversion_result': conversion_result,  # 添加转换结果
                     'status': 'payment_created',
                     'response': f"""✅ 购买确认成功！
 
@@ -925,7 +1234,7 @@ class AmazonServiceManager:
 • 总价: ${solution['total_amount']:.2f} USD
 
 **支付信息**:
-{payment_response}
+{payment_info_text}
 
 **商家订单**:
 {merchant_status}
@@ -959,6 +1268,252 @@ class AmazonServiceManager:
                 "status": "error",
                 "message": f"处理购买确认时出错: {str(e)}",
                 "response": f"很抱歉，处理您的购买确认时出现问题：{str(e)}。请重新确认您要购买的商品信息。"
+            }
+    
+    async def handle_arbitration_request(self, user_input: str) -> Dict:
+        """
+        处理用户仲裁请求
+        
+        从用户输入中提取订单ID和纠纷描述，然后调用仲裁Agent发起仲裁。
+        
+        Args:
+            user_input: 用户输入的仲裁请求文本
+        
+        Returns:
+            包含处理结果的字典
+        """
+        logger.info("⚖️ [UserAgent] 开始处理用户仲裁请求")
+        
+        try:
+            # 使用模型提取订单ID和纠纷描述
+            extraction_prompt = f"""
+            从用户消息中提取仲裁请求信息。
+            
+            用户消息: "{user_input}"
+            
+            请提取以下信息：
+            1. 订单ID（格式可能是 ORDER_xxx 或 ORDERxxx）
+            2. 纠纷描述（用户描述的问题）
+            
+            返回JSON格式：
+            {{
+                "order_id": "订单ID",
+                "dispute_description": "纠纷描述"
+            }}
+            
+            如果无法提取订单ID，返回 null。
+            """
+            
+            extraction_agent = ChatAgent(system_message=extraction_prompt, model=self.model)
+            response = await extraction_agent.astep(user_input)
+            content = response.msgs[0].content
+            
+            # 从响应中提取JSON
+            start = content.find('{')
+            end = content.rfind('}') + 1
+            if start == -1 or end == 0:
+                raise ValueError("无法从响应中提取JSON")
+            
+            extracted_info = json.loads(content[start:end])
+            order_id = extracted_info.get("order_id")
+            dispute_description = extracted_info.get("dispute_description", "")
+            
+            if not order_id:
+                return {
+                    "status": "error",
+                    "message": "无法从消息中提取订单ID",
+                    "response": "❌ 无法识别订单ID。请提供订单ID，格式如：ORDER_1234567890"
+                }
+            
+            if not dispute_description:
+                dispute_description = "用户发起仲裁请求"
+                logger.warning("⚠️ [UserAgent] 未提取到纠纷描述，使用默认描述")
+            
+            # 从订单存储中获取订单信息
+            if order_id not in self.user_orders:
+                return {
+                    "status": "error",
+                    "message": f"订单不存在: {order_id}",
+                    "response": f"❌ 未找到订单: {order_id}。请确认订单ID是否正确。"
+                }
+            
+            order_data = self.user_orders[order_id]
+            
+            # 获取订单中的仲裁信息
+            arbitration_info = order_data.get("arbitration_info", {})
+            arbitration_agent_url = arbitration_info.get("arbitration_agent_url")
+            
+            if not arbitration_agent_url:
+                return {
+                    "status": "error",
+                    "message": "订单未配置仲裁Agent",
+                    "response": "❌ 该订单未配置仲裁Agent，无法发起仲裁。"
+                }
+            
+            # 获取用户Agent URL和商家Agent URL
+            user_agent_url = self.agent_card.url if hasattr(self, 'agent_card') and self.agent_card else None
+            if not user_agent_url:
+                user_agent_url = order_data.get("user_agent_url")
+            
+            merchant_agent_url = order_data.get("merchant_agent_url")
+            if not merchant_agent_url:
+                # 尝试从订单数据中获取商家Agent URL
+                merchant_result = order_data.get("merchant_result", {})
+                merchant_agent_url = merchant_result.get("merchant_agent_url")
+                # 如果还是没有，尝试从merchant_response中提取
+                if not merchant_agent_url and merchant_result.get("merchant_response"):
+                    merchant_response = merchant_result.get("merchant_response", {})
+                    merchant_agent_url = merchant_response.get("merchant_agent_url")
+            
+            if not merchant_agent_url:
+                return {
+                    "status": "error",
+                    "message": "无法获取商家Agent URL",
+                    "response": "❌ 无法获取商家Agent信息，无法发起仲裁。"
+                }
+            
+            # 准备订单信息
+            order_info = {
+                "order_id": order_id,
+                "amount": order_data.get("amount"),
+                "currency": order_data.get("currency"),
+                "product_info": order_data.get("product_info", {}),
+                "payment_info": order_data.get("payment_info", {}),
+                "status": order_data.get("status", "unknown")
+            }
+            
+            # 调用仲裁Agent的 initiate_arbitration() 方法
+            logger.info(f"📞 [UserAgent] 调用仲裁Agent的 initiate_arbitration() 方法: {arbitration_agent_url}")
+            
+            try:
+                arbitration_client = A2AClient(arbitration_agent_url)
+                
+                # 构建仲裁请求（符合仲裁Agent的 initiate_arbitration() 接口）
+                arbitration_request = {
+                    "type": "initiate_arbitration",
+                    "order_id": order_id,
+                    "user_agent_url": user_agent_url,
+                    "merchant_agent_url": merchant_agent_url,
+                    "dispute_description": dispute_description,
+                    "order_info": order_info
+                }
+                
+                # 通过 A2A 协议调用仲裁Agent的 initiate_arbitration() 方法
+                logger.info(f"📤 [UserAgent] 发送仲裁请求到仲裁Agent...")
+                request_text = json.dumps(arbitration_request, ensure_ascii=False)
+                response_text = arbitration_client.ask(request_text)
+                logger.info(f"📥 [UserAgent] 收到仲裁Agent响应")
+                
+                # 解析响应
+                try:
+                    if "{" in response_text and "}" in response_text:
+                        start = response_text.find("{")
+                        end = response_text.rfind("}") + 1
+                        json_str = response_text[start:end]
+                        arbitration_result = json.loads(json_str)
+                    else:
+                        # 如果不是JSON，尝试解析文本响应
+                        arbitration_result = {
+                            "success": "成功" in response_text or "success" in response_text.lower(),
+                            "message": response_text,
+                            "case_id": None
+                        }
+                        
+                        # 尝试从文本中提取case_id
+                        import re
+                        case_id_match = re.search(r'ARB[_\-]?[A-Za-z0-9_]+', response_text)
+                        if case_id_match:
+                            arbitration_result["case_id"] = case_id_match.group(0)
+                
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning(f"⚠️ [UserAgent] 解析仲裁Agent响应失败: {e}")
+                    arbitration_result = {
+                        "success": False,
+                        "error": f"解析响应失败: {str(e)}",
+                        "raw_response": response_text
+                    }
+                
+                if arbitration_result.get("success"):
+                    case_id = arbitration_result.get("case_id")
+                    
+                    # 更新订单的仲裁信息
+                    if "arbitration_info" not in order_data:
+                        order_data["arbitration_info"] = {}
+                    
+                    order_data["arbitration_info"].update({
+                        "arbitration_agent_url": arbitration_agent_url,
+                        "status": "initiated",  # 更新仲裁状态为已发起
+                        "case_id": case_id,
+                        "decision": None,
+                        "responsible_party": None
+                    })
+                    
+                    # 更新订单主状态（如果存在）
+                    if "status" in order_data:
+                        # 如果订单状态不是已完成或已取消，可以标记为仲裁中
+                        current_status = order_data.get("status", "").lower()
+                        if current_status not in ["completed", "cancelled"]:
+                            order_data["status"] = "arbitration_pending"
+                            logger.info(f"📝 [UserAgent] 订单状态已更新为: arbitration_pending")
+                    
+                    # 更新订单存储
+                    self.user_orders[order_id] = order_data
+                    
+                    logger.info(f"✅ [UserAgent] 仲裁请求已成功提交，案例ID: {case_id}")
+                    logger.info(f"📝 [UserAgent] 订单 {order_id} 的仲裁信息已更新: status=initiated, case_id={case_id}")
+                    
+                    return {
+                        "status": "success",
+                        "message": "仲裁请求已成功提交",
+                        "response": f"""✅ 仲裁请求已成功提交
+
+**订单ID**: {order_id}
+**案例ID**: {case_id}
+**纠纷描述**: {dispute_description}
+
+仲裁Agent将处理您的请求，请等待处理结果。""",
+                        "case_id": case_id,
+                        "order_id": order_id
+                    }
+                else:
+                    error_msg = arbitration_result.get("error", "未知错误")
+                    logger.error(f"❌ [UserAgent] 仲裁请求失败: {error_msg}")
+                    
+                    return {
+                        "status": "error",
+                        "message": f"仲裁请求失败: {error_msg}",
+                        "response": f"❌ 仲裁请求失败: {error_msg}",
+                        "arbitration_result": arbitration_result
+                    }
+            
+            except Exception as e:
+                logger.error(f"❌ [UserAgent] 调用仲裁Agent失败: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                
+                return {
+                    "status": "error",
+                    "message": f"调用仲裁Agent失败: {str(e)}",
+                    "response": f"❌ 无法连接到仲裁Agent: {str(e)}"
+                }
+        
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ [UserAgent] 解析提取结果失败: {e}")
+            return {
+                "status": "error",
+                "message": "解析用户输入失败",
+                "response": "❌ 无法理解您的仲裁请求。请提供订单ID和纠纷描述。"
+            }
+        
+        except Exception as e:
+            logger.error(f"❌ [UserAgent] 处理仲裁请求时出错: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
+            return {
+                "status": "error",
+                "message": f"处理仲裁请求时出错: {str(e)}",
+                "response": f"❌ 处理仲裁请求失败: {str(e)}"
             }
 
 # ==============================================================================

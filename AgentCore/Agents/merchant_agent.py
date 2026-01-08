@@ -114,6 +114,16 @@ class DeliveryInfo:
 
 
 @dataclass
+class ArbitrationInfo:
+    """仲裁信息数据模型"""
+    arbitration_agent_url: Optional[str] = None  # 选定的仲裁Agent URL
+    status: str = "none"  # none, initiated, decided
+    case_id: Optional[str] = None  # 仲裁案例ID（发起仲裁后设置）
+    decision: Optional[str] = None  # 仲裁裁定结果（decided后设置）
+    responsible_party: Optional[str] = None  # "user" or "merchant"（decided后设置）
+
+
+@dataclass
 class Order:
     """订单数据模型"""
     order_id: str
@@ -124,6 +134,7 @@ class Order:
     status: OrderStatus = OrderStatus.PENDING
     payment_info: Optional[PaymentInfo] = None
     delivery_info: Optional[DeliveryInfo] = None
+    arbitration_info: Optional[ArbitrationInfo] = None  # 仲裁信息
     
     # 时间戳
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -152,6 +163,8 @@ class Order:
             result["payment_info"] = asdict(self.payment_info)
         if self.delivery_info:
             result["delivery_info"] = asdict(self.delivery_info)
+        if self.arbitration_info:
+            result["arbitration_info"] = asdict(self.arbitration_info)
         return result
     
     @classmethod
@@ -176,6 +189,10 @@ class Order:
             data["delivery_info"] = DeliveryInfo(**data["delivery_info"])
         elif "delivery_info" not in data:
             data["delivery_info"] = None
+        if "arbitration_info" in data and isinstance(data["arbitration_info"], dict):
+            data["arbitration_info"] = ArbitrationInfo(**data["arbitration_info"])
+        elif "arbitration_info" not in data:
+            data["arbitration_info"] = None
         
         return cls(**data)
 
@@ -214,6 +231,40 @@ class MerchantAgent(A2AServer):
             except Exception as e:
                 logger.warning(f"⚠️ [MerchantAgent] 区块链服务初始化失败: {e}")
                 self.blockchain_service = None
+        
+        # 商家接受的支付方式配置（默认支持所有支付方式）
+        # 可以从环境变量读取，格式：MERCHANT_ACCEPTED_PAYMENT_METHODS=alipay,wechat_pay,paypal
+        accepted_payment_methods_env = os.getenv("MERCHANT_ACCEPTED_PAYMENT_METHODS", "").strip()
+        if accepted_payment_methods_env:
+            # 从环境变量解析支付方式列表
+            self.accepted_payment_methods = [
+                method.strip().lower() 
+                for method in accepted_payment_methods_env.split(",") 
+                if method.strip()
+            ]
+            logger.info(f"✅ [MerchantAgent] 从环境变量读取接受的支付方式: {self.accepted_payment_methods}")
+        else:
+            # 默认支持所有支付方式
+            self.accepted_payment_methods = [
+                "alipay", "wechat_pay", "paypal", "crypto_stablecoin"
+            ]
+            logger.info(f"✅ [MerchantAgent] 使用默认接受的支付方式: {self.accepted_payment_methods}")
+        
+        # 商家接受的仲裁Agent配置（从环境变量读取）
+        # 格式：MERCHANT_ACCEPTED_ARBITRATION_AGENTS=http://localhost:5025,http://localhost:5026
+        accepted_arbitration_agents_env = os.getenv("MERCHANT_ACCEPTED_ARBITRATION_AGENTS", "").strip()
+        if accepted_arbitration_agents_env:
+            # 从环境变量解析仲裁Agent URL列表
+            self.accepted_arbitration_agents = [
+                url.strip() 
+                for url in accepted_arbitration_agents_env.split(",") 
+                if url.strip()
+            ]
+            logger.info(f"✅ [MerchantAgent] 从环境变量读取接受的仲裁Agent: {self.accepted_arbitration_agents}")
+        else:
+            # 默认使用空列表（表示不限制，或使用系统默认）
+            self.accepted_arbitration_agents = []
+            logger.info("ℹ️ [MerchantAgent] 商家接受的仲裁Agent未配置，将使用默认值（空列表）")
         
         logger.info("✅ [MerchantAgent] 商家 Agent 初始化完成")
     
@@ -297,6 +348,10 @@ class MerchantAgent(A2AServer):
         elif any(keyword in text_lower for keyword in ["管理订单", "manage order", "更新订单", "update order"]):
             return self._handle_order_management(text)
         
+        # 检查是否是仲裁通知请求
+        elif any(keyword in text_lower for keyword in ["仲裁", "arbitration", "裁定结果", "arbitration result", "仲裁通知"]):
+            return self.handle_arbitration_notification(text)
+        
         # 默认响应
         else:
             return self._handle_general_request(text)
@@ -374,8 +429,30 @@ class MerchantAgent(A2AServer):
                 logger.warning(f"⚠️ 金额不一致: 订单金额={amount}, 计算金额={calculated_amount}")
                 # 使用订单中的金额，但记录警告
             
-            # 创建支付信息
+            # 验证支付方式是否被接受
             payment_data = order_data.get("payment_info", {})
+            payment_method = payment_data.get("payment_method") if payment_data else None
+            if payment_method:
+                payment_method_lower = payment_method.lower().strip()
+                # 标准化支付方式名称（处理可能的变体）
+                payment_method_normalized = payment_method_lower.replace("-", "_").replace(" ", "_")
+                
+                # 检查支付方式是否在接受的列表中
+                if payment_method_normalized not in self.accepted_payment_methods:
+                    # 尝试匹配支付方式的变体
+                    accepted_normalized = [pm.replace("-", "_").replace(" ", "_") for pm in self.accepted_payment_methods]
+                    if payment_method_normalized not in accepted_normalized:
+                        logger.warning(f"❌ [MerchantAgent] 不接受的支付方式: {payment_method} (接受的支付方式: {self.accepted_payment_methods})")
+                        return {
+                            "success": False,
+                            "error": f"不接受的支付方式: {payment_method}",
+                            "accepted_payment_methods": self.accepted_payment_methods,
+                            "provided_payment_method": payment_method
+                        }
+                
+                logger.info(f"✅ [MerchantAgent] 支付方式验证通过: {payment_method}")
+            
+            # 创建支付信息
             payment_info = None
             if payment_data:
                 payment_info = PaymentInfo(
@@ -765,6 +842,15 @@ class MerchantAgent(A2AServer):
     
     def _handle_general_request(self, text: str) -> str:
         """处理一般请求"""
+        text_lower = text.lower()
+        
+        # 检查是否是查询仲裁偏好的请求
+        if any(keyword in text_lower for keyword in ["仲裁agent", "arbitration agent", "accepted_arbitration_agents", "仲裁偏好"]):
+            # 返回商家接受的仲裁Agent列表（JSON格式）
+            return json.dumps({
+                "accepted_arbitration_agents": self.accepted_arbitration_agents
+            }, ensure_ascii=False)
+        
         return f"""🤖 商家 Agent 服务
 
 我已收到您的请求: "{text}"
@@ -780,6 +866,375 @@ class MerchantAgent(A2AServer):
 - "查询订单 ORDER001"
 - "交付订单 ORDER001"
 """
+    
+    def handle_arbitration_notification(self, text: str) -> str:
+        """
+        处理仲裁通知
+        
+        接收仲裁Agent发送的通知，包括：
+        - 裁定结果通知
+        - 执行结果通知
+        - 订单更新通知
+        
+        Args:
+            text: 通知文本（可能是JSON格式或文本格式）
+        
+        Returns:
+            响应文本（JSON格式或文本格式）
+        """
+        logger.info("⚖️ [MerchantAgent] 接收仲裁通知")
+        
+        try:
+            # 尝试解析JSON格式的请求
+            try:
+                if "{" in text and "}" in text:
+                    start = text.find("{")
+                    end = text.rfind("}") + 1
+                    json_str = text[start:end]
+                    request_data = json.loads(json_str)
+                    request_type = request_data.get("type", "")
+                    
+                    if request_type == "update_order_arbitration":
+                        # 更新订单仲裁信息
+                        result = self._update_order_arbitration_info(request_data)
+                        return json.dumps(result, ensure_ascii=False, indent=2)
+                    else:
+                        # 其他类型的JSON请求，作为通知处理
+                        return json.dumps({
+                            "success": True,
+                            "status": "received",
+                            "message": "仲裁通知已接收"
+                        }, ensure_ascii=False, indent=2)
+                else:
+                    # 不是JSON格式，作为文本通知处理
+                    return self._handle_text_arbitration_notification(text)
+            
+            except json.JSONDecodeError:
+                # 解析JSON失败，作为文本通知处理
+                return self._handle_text_arbitration_notification(text)
+        
+        except Exception as e:
+            logger.error(f"❌ [MerchantAgent] 处理仲裁通知失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
+            return json.dumps({
+                "success": False,
+                "error": f"处理仲裁通知失败: {str(e)}"
+            }, ensure_ascii=False, indent=2)
+    
+    def _handle_text_arbitration_notification(self, text: str) -> str:
+        """
+        处理文本格式的仲裁通知
+        
+        Args:
+            text: 通知文本
+        
+        Returns:
+            响应文本（JSON格式）
+        """
+        logger.info("📝 [MerchantAgent] 处理文本格式的仲裁通知")
+        
+        try:
+            # 检查是否是裁定结果通知
+            if "裁定结果" in text or "仲裁裁定" in text or "arbitration result" in text.lower():
+                # 提取案例ID和订单ID
+                import re
+                case_id_match = re.search(r'案例[_\s]*ID[:\s]*([A-Za-z0-9_-]+)', text, re.IGNORECASE)
+                if not case_id_match:
+                    case_id_match = re.search(r'case[_\s]*id[:\s]*([A-Za-z0-9_-]+)', text, re.IGNORECASE)
+                if not case_id_match:
+                    case_id_match = re.search(r'ARB[_\-]?[A-Za-z0-9_]+', text, re.IGNORECASE)
+                
+                order_id_match = re.search(r'订单[_\s]*ID[:\s]*([A-Za-z0-9_-]+)', text, re.IGNORECASE)
+                if not order_id_match:
+                    order_id_match = re.search(r'order[_\s]*id[:\s]*([A-Za-z0-9_-]+)', text, re.IGNORECASE)
+                
+                case_id = case_id_match.group(1) if case_id_match else None
+                order_id = order_id_match.group(1) if order_id_match else None
+                
+                if case_id:
+                    # 自动确认裁定结果（默认同意）
+                    # 可以从环境变量或配置中读取确认策略
+                    auto_agree = os.getenv("MERCHANT_AUTO_AGREE_ARBITRATION", "true").lower() == "true"
+                    
+                    if auto_agree:
+                        logger.info(f"✅ [MerchantAgent] 自动确认裁定结果: {case_id}")
+                        confirm_result = self._confirm_arbitration_decision(case_id, True)
+                        return json.dumps(confirm_result, ensure_ascii=False, indent=2)
+                    else:
+                        logger.info(f"ℹ️ [MerchantAgent] 需要人工确认裁定结果: {case_id}")
+                        return json.dumps({
+                            "success": True,
+                            "status": "received",
+                            "case_id": case_id,
+                            "order_id": order_id,
+                            "message": "裁定结果通知已接收，等待人工确认"
+                        }, ensure_ascii=False, indent=2)
+                else:
+                    return json.dumps({
+                        "success": True,
+                        "status": "received",
+                        "message": "裁定结果通知已接收，但无法提取案例ID"
+                    }, ensure_ascii=False, indent=2)
+            
+            # 检查是否是执行结果通知
+            elif "执行结果" in text or "仲裁结果已执行" in text or "execution result" in text.lower():
+                # 提取案例ID和订单ID
+                import re
+                case_id_match = re.search(r'案例[_\s]*ID[:\s]*([A-Za-z0-9_-]+)', text, re.IGNORECASE)
+                if not case_id_match:
+                    case_id_match = re.search(r'case[_\s]*id[:\s]*([A-Za-z0-9_-]+)', text, re.IGNORECASE)
+                if not case_id_match:
+                    case_id_match = re.search(r'ARB[_\-]?[A-Za-z0-9_]+', text, re.IGNORECASE)
+                
+                order_id_match = re.search(r'订单[_\s]*ID[:\s]*([A-Za-z0-9_-]+)', text, re.IGNORECASE)
+                if not order_id_match:
+                    order_id_match = re.search(r'order[_\s]*id[:\s]*([A-Za-z0-9_-]+)', text, re.IGNORECASE)
+                
+                case_id = case_id_match.group(1) if case_id_match else None
+                order_id = order_id_match.group(1) if order_id_match else None
+                
+                logger.info(f"✅ [MerchantAgent] 收到执行结果通知: case_id={case_id}, order_id={order_id}")
+                
+                return json.dumps({
+                    "success": True,
+                    "status": "received",
+                    "case_id": case_id,
+                    "order_id": order_id,
+                    "message": "执行结果通知已接收"
+                }, ensure_ascii=False, indent=2)
+            
+            # 其他类型的通知
+            else:
+                logger.info("ℹ️ [MerchantAgent] 收到其他类型的仲裁通知")
+                return json.dumps({
+                    "success": True,
+                    "status": "received",
+                    "message": "仲裁通知已接收"
+                }, ensure_ascii=False, indent=2)
+        
+        except Exception as e:
+            logger.error(f"❌ [MerchantAgent] 处理文本仲裁通知失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
+            return json.dumps({
+                "success": False,
+                "error": f"处理通知失败: {str(e)}"
+            }, ensure_ascii=False, indent=2)
+    
+    def _update_order_arbitration_info(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        更新订单的仲裁信息
+        
+        Args:
+            request_data: 包含订单更新信息的字典
+        
+        Returns:
+            包含处理结果的字典
+        """
+        logger.info("📝 [MerchantAgent] 更新订单仲裁信息")
+        
+        try:
+            order_id = request_data.get("order_id")
+            if not order_id:
+                return {
+                    "success": False,
+                    "error": "缺少必需字段: order_id"
+                }
+            
+            # 检查订单是否存在
+            if order_id not in self.orders:
+                return {
+                    "success": False,
+                    "error": f"订单不存在: {order_id}"
+                }
+            
+            order = self.orders[order_id]
+            arbitration_result = request_data.get("arbitration_result", {})
+            
+            # 更新订单的仲裁信息
+            if not order.arbitration_info:
+                order.arbitration_info = ArbitrationInfo()
+            
+            # 更新仲裁信息字段
+            if "case_id" in arbitration_result:
+                order.arbitration_info.case_id = arbitration_result["case_id"]
+            
+            if "decision" in arbitration_result:
+                order.arbitration_info.decision = arbitration_result["decision"]
+            
+            if "decision_reason" in arbitration_result:
+                # decision_reason 不在 ArbitrationInfo 数据类中，可以在 metadata 中存储
+                if not order.metadata:
+                    order.metadata = {}
+                order.metadata["arbitration_decision_reason"] = arbitration_result["decision_reason"]
+            
+            if "responsible_party" in arbitration_result:
+                order.arbitration_info.responsible_party = arbitration_result["responsible_party"]
+            
+            if "status" in arbitration_result:
+                order.arbitration_info.status = arbitration_result["status"]
+            
+            # 更新订单的更新时间
+            order.updated_at = datetime.now().isoformat()
+            
+            logger.info(f"✅ [MerchantAgent] 订单 {order_id} 的仲裁信息已更新")
+            logger.info(f"   裁定结果: {arbitration_result.get('decision')}")
+            logger.info(f"   责任方: {arbitration_result.get('responsible_party')}")
+            logger.info(f"   状态: {arbitration_result.get('status')}")
+            
+            return {
+                "success": True,
+                "order_id": order_id,
+                "message": "订单仲裁信息已更新",
+                "arbitration_info": {
+                    "decision": arbitration_result.get("decision"),
+                    "responsible_party": arbitration_result.get("responsible_party"),
+                    "status": arbitration_result.get("status")
+                }
+            }
+        
+        except Exception as e:
+            logger.error(f"❌ [MerchantAgent] 更新订单仲裁信息失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
+            return {
+                "success": False,
+                "error": f"更新订单仲裁信息失败: {str(e)}"
+            }
+    
+    def _confirm_arbitration_decision(self, case_id: str, agreed: bool) -> Dict[str, Any]:
+        """
+        确认裁定结果
+        
+        Args:
+            case_id: 仲裁案例ID
+            agreed: 是否同意（True表示同意，False表示不同意）
+        
+        Returns:
+            包含确认结果的字典
+        """
+        logger.info(f"✅ [MerchantAgent] 确认裁定结果: case_id={case_id}, agreed={agreed}")
+        
+        try:
+            # 从订单中获取仲裁Agent URL
+            # 这里需要从订单的仲裁信息中获取，或者从环境变量获取
+            arbitration_agent_url = os.getenv("ARBITRATION_AGENT_URL", "http://localhost:5025")
+            
+            # 通过搜索订单找到包含此案例的订单
+            order_with_case = None
+            for order in self.orders.values():
+                # 从 arbitration_info 或 metadata 中查找案例ID
+                case_id_match = False
+                if order.arbitration_info and order.arbitration_info.case_id == case_id:
+                    case_id_match = True
+                    # 从 arbitration_info 中获取仲裁Agent URL
+                    if order.arbitration_info.arbitration_agent_url:
+                        arbitration_agent_url = order.arbitration_info.arbitration_agent_url
+                elif order.metadata and order.metadata.get("arbitration_case_id") == case_id:
+                    case_id_match = True
+                    # 如果有 arbitration_info，从中获取仲裁Agent URL
+                    if order.arbitration_info and order.arbitration_info.arbitration_agent_url:
+                        arbitration_agent_url = order.arbitration_info.arbitration_agent_url
+                
+                if case_id_match:
+                    order_with_case = order
+                    break
+            
+            if not order_with_case:
+                logger.warning(f"⚠️ [MerchantAgent] 未找到包含案例 {case_id} 的订单，使用默认仲裁Agent URL")
+            
+            # 调用仲裁Agent的 confirm_decision 方法
+            try:
+                arbitration_client = A2AClient(arbitration_agent_url)
+                
+                confirm_request = {
+                    "type": "confirm_decision",
+                    "case_id": case_id,
+                    "party": "merchant",
+                    "agreed": agreed
+                }
+                
+                request_text = json.dumps(confirm_request, ensure_ascii=False)
+                response = arbitration_client.ask(request_text)
+                
+                # 解析响应
+                try:
+                    if "{" in response and "}" in response:
+                        start = response.find("{")
+                        end = response.rfind("}") + 1
+                        json_str = response[start:end]
+                        result = json.loads(json_str)
+                        
+                        if result.get("success"):
+                            logger.info(f"✅ [MerchantAgent] 确认结果已发送到仲裁Agent: {case_id}")
+                            
+                            # 如果确认成功，更新本地订单状态
+                            if order_with_case and order_with_case.arbitration_info:
+                                if agreed:
+                                    order_with_case.arbitration_info.status = "agreed"
+                                    logger.info(f"📝 [MerchantAgent] 订单 {order_with_case.order_id} 的仲裁状态已更新为: agreed")
+                                else:
+                                    order_with_case.arbitration_info.status = "escalated"
+                                    logger.info(f"📝 [MerchantAgent] 订单 {order_with_case.order_id} 的仲裁状态已更新为: escalated")
+                            
+                            return {
+                                "success": True,
+                                "case_id": case_id,
+                                "agreed": agreed,
+                                "message": f"确认结果已发送: {'同意' if agreed else '不同意'}",
+                                "arbitration_response": result
+                            }
+                        else:
+                            error_msg = result.get("error", "未知错误")
+                            logger.error(f"❌ [MerchantAgent] 确认失败: {error_msg}")
+                            return {
+                                "success": False,
+                                "error": error_msg,
+                                "arbitration_response": result
+                            }
+                    else:
+                        # 文本响应，认为成功
+                        logger.info(f"✅ [MerchantAgent] 确认结果已发送（文本响应）")
+                        return {
+                            "success": True,
+                            "case_id": case_id,
+                            "agreed": agreed,
+                            "message": f"确认结果已发送: {'同意' if agreed else '不同意'}",
+                            "raw_response": response
+                        }
+                
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning(f"⚠️ [MerchantAgent] 解析仲裁Agent响应失败: {e}")
+                    return {
+                        "success": False,
+                        "error": f"解析响应失败: {str(e)}",
+                        "raw_response": response
+                    }
+            
+            except Exception as e:
+                logger.error(f"❌ [MerchantAgent] 调用仲裁Agent失败: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                
+                return {
+                    "success": False,
+                    "error": f"调用仲裁Agent失败: {str(e)}"
+                }
+        
+        except Exception as e:
+            logger.error(f"❌ [MerchantAgent] 确认裁定结果失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
+            return {
+                "success": False,
+                "error": f"确认裁定结果失败: {str(e)}",
+                "case_id": case_id
+            }
     
     def _parse_order_from_text(self, text: str) -> Dict[str, Any]:
         """从文本中解析订单信息"""
